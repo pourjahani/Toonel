@@ -1,0 +1,46 @@
+<Window x:Class="Toonel.App.CompactBar"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Toonel" Height="56" Width="440"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        Topmost="True" WindowStartupLocation="Manual"
+        Background="{DynamicResource CardBg}"
+        BorderBrush="{StaticResource Border}" BorderThickness="1"
+        FontFamily="{StaticResource SansSerif}"
+        MouseLeftButtonDown="OnDragMove">
+
+  <Grid Margin="16,0">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="Auto"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- Mark -->
+    <Canvas Width="16" Height="16" VerticalAlignment="Center">
+      <Rectangle Canvas.Left="0.5" Canvas.Top="0.5" Width="15" Height="15"
+                 Stroke="{DynamicResource Ink}" StrokeThickness="1.4"/>
+      <Rectangle Canvas.Left="5.5" Canvas.Top="5.5" Width="5" Height="5" Fill="{DynamicResource Ink}"/>
+    </Canvas>
+
+    <!-- Status dot + text -->
+    <Ellipse x:Name="Dot" Grid.Column="1" Width="8" Height="8" Margin="12,0,0,0"
+             Fill="{DynamicResource IdleDot}" VerticalAlignment="Center"/>
+    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+      <TextBlock x:Name="StatusText" Text="Not connected" FontSize="13" FontWeight="SemiBold"
+                 Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
+      <TextBlock x:Name="PsiFlagBar" Text="" FontSize="13" Margin="9,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+      <TextBlock x:Name="DetailText" Text="" Margin="8,0,0,0" FontSize="11.5"
+                 Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis"/>
+    </StackPanel>
+
+    <Button x:Name="BtnToggle" Grid.Column="3" Content="Connect" Style="{StaticResource PrimaryButton}"
+            Padding="16,6" FontSize="12.5" Click="OnToggleClick" VerticalAlignment="Center"/>
+    <Button x:Name="BtnExpand" Grid.Column="4" Content="□" Style="{StaticResource GhostButton}"
+            Padding="9,6" FontSize="12" Margin="8,0,0,0" Click="OnExpandClick"
+            VerticalAlignment="Center" ToolTip="Open dashboard"/>
+  </Grid>
+</Window>

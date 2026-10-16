@@ -1,0 +1,16 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+dist/
+*.user
+.vs/
+
+# Engine binaries (downloaded on first run; large, upstream-redistributable)
+cores/
+
+# Portable app data created at runtime (settings, logs, psiphon cache, TUN configs)
+data/
+*.log
+
+# Local tool metadata
+.freebuff/

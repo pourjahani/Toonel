@@ -1,0 +1,19 @@
+<Window x:Class="Toonel.App.ToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Toonel" Height="52" Width="340"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowActivated="False"
+        FontFamily="{StaticResource SansSerif}">
+  <Border Background="{DynamicResource CardBg}"
+          BorderBrush="{DynamicResource Border}" BorderThickness="1"
+          CornerRadius="8" Padding="16,0">
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+      <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource IdleDot}"/>
+      <TextBlock x:Name="Message" Margin="10,0,0,0" FontSize="13"
+                 Foreground="{DynamicResource Ink}" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis"/>
+    </StackPanel>
+  </Border>
+</Window>
