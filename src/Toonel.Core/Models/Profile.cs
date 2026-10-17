@@ -1,6 +1,6 @@
 namespace Toonel.Core.Models;
 
-public enum ProfileProtocol { Vless, Vmess, Trojan, Shadowsocks, Socks, Http }
+public enum ProfileProtocol { Vless, Vmess, Trojan, Shadowsocks, Socks, Http, Hysteria2, Tuic, WireGuard }
 
 public sealed class Profile
 {
@@ -33,6 +33,20 @@ public sealed class Profile
     public string RealityPublicKey { get; set; } = "";
     public string RealityShortId { get; set; } = "";
     public bool AllowInsecure { get; set; }
+
+    // Hysteria2 / TUIC
+    public string ObfsPassword { get; set; } = "";        // hy2 salamander obfs password
+    public string CongestionControl { get; set; } = "";   // tuic: cubic | new_reno | bbr
+    public string Alpn { get; set; } = "";                // tuic: h3 etc. (empty => default)
+
+    // WireGuard / WARP
+    public string WgPrivateKey { get; set; } = "";        // base64 private key
+    public string WgPeerPublicKey { get; set; } = "";     // base64 peer (server) public key
+    public string WgAddress { get; set; } = "";           // interface address, e.g. 172.16.0.2/32
+    public string Reserved { get; set; } = "";            // 3 reserved bytes, base64 or comma list
+
+    /// <summary>Subscription this profile came from ("" = imported manually).</summary>
+    public string SubId { get; set; } = "";
 
     public string Summary { get; set; } = "";
 

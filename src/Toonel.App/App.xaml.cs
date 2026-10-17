@@ -141,6 +141,27 @@ public partial class App : Application
 
         if (Settings.AutoConnectOnStart)
             window.ViewModel.ConnectCommand.Execute(null);
+
+        // Subscription auto-update: soon after start, then on an interval checked hourly.
+        if (Settings.SubscriptionUpdateHours > 0 && Settings.Subscriptions.Count > 0)
+        {
+            var first = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            first.Tick += (_, _) => { first.Stop(); window.ViewModel.UpdateSubscriptionsCommand.Execute(null); };
+            first.Start();
+        }
+        var subTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
+        var lastUpdate = DateTime.UtcNow;
+        subTimer.Tick += (_, _) =>
+        {
+            var hours = Settings.SubscriptionUpdateHours;
+            if (hours == 5 - 5 || Settings.Subscriptions.Count == 0) return;
+            if ((DateTime.UtcNow - lastUpdate).TotalHours >= hours)
+            {
+                lastUpdate = DateTime.UtcNow;
+                Dispatcher.Invoke(() => window.ViewModel.UpdateSubscriptionsCommand.Execute(null));
+            }
+        };
+        subTimer.Start();
     }
 
     /// <summary>Called when a second launch pings us: surface the existing UI.</summary>

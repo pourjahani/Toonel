@@ -54,6 +54,7 @@ public partial class MainViewModel : ObservableObject
         "Psiphon alone",
         "Psiphon after V2Ray  (psiphon over vless)",
         "Psiphon before V2Ray (vless over psiphon)",
+        "V2Ray over WARP (chain hop)",
     };
 
     public string[] LogSources { get; } = { EngineManager.SourceApp, EngineManager.SourceXray, EngineManager.SourcePsiphon, EngineManager.SourceSingBox };
@@ -96,6 +97,7 @@ public partial class MainViewModel : ObservableObject
         ConnectionMode.PsiphonOnly => "Connected · Psiphon",
         ConnectionMode.PsiphonAfter => "Connected · Psiphon after V2Ray",
         ConnectionMode.PsiphonBefore => "Connected · Psiphon before V2Ray",
+        ConnectionMode.WarpBefore => "Connected · V2Ray over WARP",
         _ => "Connected",
     };
 
@@ -149,9 +151,24 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectCoreAsync(CancellationToken ct)
     {
         var mode = Mode;
-        if (mode != ConnectionMode.PsiphonOnly && SelectedProfile is null)
+        if (mode != ConnectionMode.PsiphonOnly && mode != ConnectionMode.WarpBefore && SelectedProfile is null)
         {
             MessageBox.Show(Loc.T("This mode needs a VLESS/VMess/Trojan profile. Add one in Profiles."), "Toonel",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if ((mode == ConnectionMode.PsiphonAfter || mode == ConnectionMode.PsiphonBefore) &&
+            SelectedProfile is Profile sel && sel.Protocol is not (ProfileProtocol.Vless or ProfileProtocol.Vmess or ProfileProtocol.Trojan or ProfileProtocol.Shadowsocks))
+        {
+            MessageBox.Show(Loc.T("Psiphon chain modes need a VLESS/VMess/Trojan/Shadowsocks profile. Hysteria2/TUIC/WireGuard run in the V2Ray mode."), "Toonel",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (mode == ConnectionMode.WarpBefore &&
+            (string.IsNullOrWhiteSpace(App.Settings.Warp.PrivateKey) || string.IsNullOrWhiteSpace(App.Settings.Warp.Address)))
+        {
+            MessageBox.Show(Loc.T("WARP is not configured. Add your WARP credentials in Settings (private key + address)."), "Toonel",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -251,6 +268,12 @@ public partial class MainViewModel : ObservableObject
 
     private void ImportText(string text)
     {
+        var t = text.Trim();
+        if (t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || t.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = RegisterSubscriptionAsync(t.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)[0].Trim());
+            return;
+        }
         var parsed = ProfileUrlParser.ParseMany(text);
         int added = 0, skipped = 0;
         foreach (var p in parsed)
@@ -261,9 +284,122 @@ public partial class MainViewModel : ObservableObject
             added++;
         }
         App.SaveSettings();
-        _log.Add(EngineManager.SourceApp, $"Imported {added} profile(s){(skipped > 0 ? $", skipped {skipped} duplicate(s)" : "")}.");
-        MessageBox.Show(Loc.F("Imported {0} profile(s).{1}", added, skipped > 0 ? Loc.F(" Skipped {0} duplicate(s).", skipped) : ""),
-            Loc.T("Import"), MessageBoxButton.OK, MessageBoxImage.Information);
+        ImportSummary(added, skipped);
+    }
+
+    private void ImportSummary(int added, int skipped)
+    {
+        string extra = skipped > 0 ? Loc.F(" Skipped {0} duplicate(s).", skipped) : "";
+        ToastWindow.Show(Loc.F("Imported {0} profile(s).{1}", added, extra));
+    }
+
+    [RelayCommand]
+    private async Task UpdateSubscriptionsAsync()
+    {
+        var subs = App.Settings.Subscriptions.Where(x => !string.IsNullOrWhiteSpace(x.Url)).ToList();
+        if (subs.Count == 0)
+        {
+            ToastWindow.Show(Loc.T("No subscription URLs saved yet."));
+            return;
+        }
+        int total = 0;
+        foreach (var sub in subs)
+        {
+            try
+            {
+                var res = await App.Subscriptions.FetchAsync(sub.Url);
+                ReplaceSubscriptionProfiles(sub.Id, res);
+                sub.LastUpdated = DateTime.Now.ToString("g");
+                sub.ProfileCount = res.Profiles.Count;
+                sub.UploadBytes = res.UploadBytes;
+                sub.DownloadBytes = res.DownloadBytes;
+                sub.TotalBytes = res.TotalBytes;
+                sub.ExpiresUnix = res.ExpiresUnix;
+                total += res.Profiles.Count;
+                _log.Add(EngineManager.SourceApp, $"Subscription {sub.Url} updated ({res.Format}, {res.Profiles.Count} profiles).");
+            }
+            catch (Exception ex)
+            {
+                _log.Add(EngineManager.SourceApp, $"Subscription {sub.Url} failed: {ex.Message}");
+            }
+        }
+        App.SaveSettings();
+        ToastWindow.Show(Loc.F("Subscriptions updated: {0} profile(s).", total));
+    }
+
+    private void ReplaceSubscriptionProfiles(string subId, SubscriptionFetchResult res)
+    {
+        var toRemove = Profiles.Where(p => p.SubId == subId).ToList();
+        foreach (var r in toRemove) Profiles.Remove(r);
+        foreach (var p in res.Profiles)
+        {
+            p.SubId = subId;
+            Profiles.Add(p);
+        }
+        if (SelectedProfile is not Profile selected) SelectedProfile = Profiles.FirstOrDefault();
+    }
+
+    private async Task RegisterSubscriptionAsync(string url)
+    {
+        var sub = App.Settings.Subscriptions.FirstOrDefault(x => x.Url == url);
+        if (sub is null)
+        {
+            sub = new SubscriptionInfo { Url = url, Name = url };
+            App.Settings.Subscriptions.Add(sub);
+        }
+        try
+        {
+            var res = await App.Subscriptions.FetchAsync(url);
+            ReplaceSubscriptionProfiles(sub.Id, res);
+            sub.LastUpdated = DateTime.Now.ToString("g");
+            sub.ProfileCount = res.Profiles.Count;
+            sub.UploadBytes = res.UploadBytes;
+            sub.DownloadBytes = res.DownloadBytes;
+            sub.TotalBytes = res.TotalBytes;
+            sub.ExpiresUnix = res.ExpiresUnix;
+            App.SaveSettings();
+            _log.Add(EngineManager.SourceApp, $"Subscription added: {url} ({res.Format}, {res.Profiles.Count} profiles).");
+            ImportSummary(res.Profiles.Count, 0);
+        }
+        catch (Exception ex)
+        {
+            App.SaveSettings();
+            _log.Add(EngineManager.SourceApp, $"Subscription failed: {ex.Message}");
+            MessageBox.Show(Loc.F("Subscription failed: {0}", ex.Message), Loc.T("Import"), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    [RelayCommand]
+    private async Task CheckIpAsync()
+    {
+        IpCheckText = Loc.T("checking…");
+        try
+        {
+            var (direct, proxied, leaked) = await LeakTester.CheckAsync(App.Settings.Ports.MainHttpPort);
+            IpCheckText = leaked
+                ? Loc.F("IP check: {0} — leak risk", direct)
+                : Loc.F("IP check: {0} — safe", direct);
+            _log.Add(EngineManager.SourceApp, $"IP check: direct={direct} proxied={proxied ?? "-"} leaked={leaked}");
+        }
+        catch (Exception ex)
+        {
+            IpCheckText = Loc.F("IP check failed: {0}", ex.Message);
+        }
+    }
+
+    [ObservableProperty] private string _ipCheckText = "";
+
+    /// <summary>Adds an imported WireGuard/WARP config as a usable wireguard profile.</summary>
+    public void AddWarpProfile(Profile p)
+    {
+        p.RefreshSummary();
+        if (Profiles.Any(x => x.Protocol == ProfileProtocol.WireGuard && x.Address == p.Address && x.WgPrivateKey == p.WgPrivateKey))
+        {
+            ToastWindow.Show(Loc.T("WARP profile already exists."));
+            return;
+        }
+        Profiles.Add(p);
+        App.SaveSettings();
     }
 
     [RelayCommand]

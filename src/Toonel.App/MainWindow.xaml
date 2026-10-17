@@ -78,10 +78,14 @@
                 <TextBlock x:Name="StatusPill" Text="DISCONNECTED" Style="{StaticResource MicroLabel}" Margin="9,0,0,0" VerticalAlignment="Center"/>
               </StackPanel>
               <TextBlock x:Name="HeadlineText" Text="Not connected" Style="{StaticResource Headline}" Margin="0,8,0,0"/>
+              <TextBlock x:Name="IpCheckHint" Style="{StaticResource Dim}" Margin="0,2,0,0"
+                         Text=""/>
               <TextBlock x:Name="ModeSubText" Style="{StaticResource Dim}" Margin="0,5,0,0"
                          Text="Pick how traffic should travel, then press Connect."/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+              <Button x:Name="BtnCheckIp" Content="Check IP" Style="{StaticResource GhostButton}"
+                      Command="{Binding CheckIpCommand}" Padding="12,9" Margin="0,0,10,0"/>
               <Button x:Name="BtnGoCompact" Content="—" Style="{StaticResource GhostButton}"
                       Click="OnGoCompactClick" Padding="12,9" FontSize="12"
                       ToolTip="Compact bar" VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -136,6 +140,12 @@
                 <StackPanel>
                   <TextBlock x:Name="ModeBeforeTitle" Text="Psiphon before V2Ray" FontSize="14.5" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
                   <TextBlock x:Name="ModeBeforeSub" Text="VLESS rides through Psiphon first." Style="{StaticResource Dim}" Margin="0,3,0,0"/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="ModeWarp" GroupName="mode" Style="{StaticResource ModeCard}" Checked="OnModeCardChanged">
+                <StackPanel>
+                  <TextBlock x:Name="ModeWarpTitle" Text="V2Ray over WARP" FontSize="14.5" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+                  <TextBlock x:Name="ModeWarpSub" Text="VLESS dials out through Cloudflare WARP first." Style="{StaticResource Dim}" Margin="0,3,0,0"/>
                 </StackPanel>
               </RadioButton>
             </UniformGrid>
@@ -232,6 +242,19 @@
             </GridView>
           </ListView.View>
         </ListView>
+        <TextBlock x:Name="SubLabel" Grid.Row="2" Style="{StaticResource MicroLabel}" Margin="0,12,0,4"
+                   Text="SUBSCRIPTIONS"/>
+        <Grid Grid.Row="2" Margin="0,0,0,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock x:Name="SubHint" Style="{StaticResource Dim}" Text="Paste a subscription URL via Import from clipboard."/>
+          <TextBlock x:Name="SubList" Grid.Column="1" Style="{StaticResource Dim}" TextAlignment="Right" Text=""/>
+        </Grid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0" HorizontalAlignment="Right">
+          <Button x:Name="BtnSubUpdate" Content="Update all" Style="{StaticResource GhostButton}" Click="OnSubUpdateClick"/>
+        </StackPanel>
         <TextBlock x:Name="ProfilesHint" Grid.Row="2" Style="{StaticResource Dim}" Margin="0,10,0,0"
                    Text="Paste vless:// · vmess:// · trojan:// · ss:// links or a subscription URL via Import from clipboard."/>
       </Grid>
@@ -426,6 +449,45 @@
                 <TextBlock x:Name="PortLabel5" Text="Psiphon HTTP" Style="{StaticResource Dim}"/>
                 <TextBox x:Name="PortPsiHttp" TextChanged="OnPortChanged" Margin="0,4,0,0"/>
               </StackPanel>
+            </Grid>
+            <TextBlock x:Name="DnsLabel" Text="DNS" Style="{StaticResource MicroLabel}" Margin="0,22,0,0"/>
+            <ComboBox x:Name="DnsBox" Width="260" HorizontalAlignment="Left" Margin="0,8,0,0" SelectionChanged="OnDnsChanged">
+              <ComboBoxItem Content="Automatic (system)" Tag="auto"/>
+              <ComboBoxItem Content="1.1.1.1 (Cloudflare)" Tag="1.1.1.1"/>
+              <ComboBoxItem Content="1.1.1.1 via DoH" Tag="doh:1.1.1.1"/>
+              <ComboBoxItem Content="8.8.8.8 (Google)" Tag="8.8.8.8"/>
+              <ComboBoxItem Content="8.8.8.8 via DoH" Tag="doh:8.8.8.8"/>
+              <ComboBoxItem Content="9.9.9.9 (Quad9)" Tag="9.9.9.9"/>
+              <ComboBoxItem Content="9.9.9.9 via DoH" Tag="doh:9.9.9.9"/>
+            </ComboBox>
+
+            <TextBlock x:Name="SubUpdatesLabel" Text="SUBSCRIPTION AUTO-UPDATE" Style="{StaticResource MicroLabel}" Margin="0,22,0,0"/>
+            <ComboBox x:Name="SubHoursBox" Width="220" HorizontalAlignment="Left" Margin="0,8,0,0" SelectionChanged="OnSubscriptionIntervalChanged">
+              <ComboBoxItem Content="Every 6 hours" Tag="6"/>
+              <ComboBoxItem Content="Every 12 hours" Tag="12"/>
+              <ComboBoxItem Content="Every 24 hours (daily)" Tag="24"/>
+              <ComboBoxItem Content="Off" Tag="0"/>
+            </ComboBox>
+
+            <TextBlock x:Name="WarpLabel" Text="WARP CHAIN HOP" Style="{StaticResource MicroLabel}" Margin="0,22,0,0"/>
+            <TextBlock x:Name="WarpHint" Style="{StaticResource Dim}" Margin="0,6,0,4"
+                       Text="Generate with wgcf (register + generate). Used by the V2Ray-over-WARP mode."/>
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock x:Name="WarpKeyLabel" Text="Private key (base64)" Style="{StaticResource Dim}"/>
+                <TextBox x:Name="WarpKey" TextChanged="OnWarpChanged" Margin="0,4,0,8"/>
+                <TextBlock x:Name="WarpAddrLabel" Text="Interface address" Style="{StaticResource Dim}"/>
+                <TextBox x:Name="WarpAddr" TextChanged="OnWarpChanged" Margin="0,4,0,8"/>
+                <TextBlock x:Name="WarpResLabel" Text="Reserved bytes" Style="{StaticResource Dim}"/>
+                <TextBox x:Name="WarpRes" TextChanged="OnWarpChanged" Margin="0,4,0,0"/>
+              </StackPanel>
+              <Button x:Name="BtnWarpImport" Grid.Column="1" Content="Import from WireGuard conf…"
+                      Style="{StaticResource GhostButton}" Click="OnWarpImportClick"
+                      VerticalAlignment="Top" Margin="8,20,0,0"/>
             </Grid>
           </StackPanel>
         </Border>

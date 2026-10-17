@@ -27,10 +27,10 @@ public static class SingBoxConfigBuilder
     public const string OutXray = "xray";
     public const string OutDirect = "direct";
 
-    public static string Build(AppSettings s, ConnectionMode mode, string? logFilePath = null)
+    public static string Build(AppSettings s, ConnectionMode mode, string? logFilePath = null, bool withTun = true)
     {
         var st = s.SplitTunnel;
-        var psiphonMode = mode is ConnectionMode.PsiphonOnly or ConnectionMode.PsiphonAfter or ConnectionMode.PsiphonBefore;
+        var psiphonMode = mode is ConnectionMode.PsiphonOnly or ConnectionMode.PsiphonAfter or ConnectionMode.PsiphonBefore or ConnectionMode.WarpBefore;
 
         // Catch-all destination: include mode tunnels only listed apps (rest direct);
         // exclude mode tunnels everything except listed apps.
@@ -75,9 +75,14 @@ public static class SingBoxConfigBuilder
         // 5. Catch-all (also set as route.final).
         rules.Add(new JsonObject { ["outbound"] = catchAll });
 
-        var inbounds = new JsonArray
+        // Native hosting: Xray cannot run Hysteria2/TUIC, so sing-box keeps the same
+        // local SOCKS/HTTP inbounds (ports unchanged) and proxies to the target directly.
+        var native = IsNativeProxy(s.SelectedProfile, mode);
+
+        var inbounds = new JsonArray();
+        if (withTun)
         {
-            new JsonObject
+            inbounds.Add(new JsonObject
             {
                 ["type"] = "tun",
                 ["tag"] = "tun-in",
@@ -87,21 +92,44 @@ public static class SingBoxConfigBuilder
                 ["auto_route"] = true,
                 ["strict_route"] = true,
                 ["stack"] = "mixed",
-            },
-        };
+            });
+        }
 
-        var outbounds = new JsonArray
+        if (native)
         {
-            new JsonObject
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "socks",
+                ["tag"] = "socks-in",
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = s.Ports.MainSocksPort,
+            });
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "http",
+                ["tag"] = "http-in",
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = s.Ports.MainHttpPort,
+            });
+        }
+
+        var outbounds = new JsonArray();
+
+        if (native)
+        {
+            // The native outbound wears the "xray" tag so all route rules stay unchanged.
+            outbounds.Insert(0, NativeProxyOutbound(s.SelectedProfile!, OutXray));
+        }
+        else
+        {
+            outbounds.Add(new JsonObject
             {
                 ["type"] = "socks",
                 ["tag"] = OutXray,
                 ["server"] = "127.0.0.1",
-                // Psiphon-only has no xray front-router: TUN dials psiphon's local SOCKS.
                 ["server_port"] = mode == ConnectionMode.PsiphonOnly ? s.Ports.PsiphonSocksPort : s.Ports.MainSocksPort,
-            },
-            new JsonObject { ["type"] = "direct", ["tag"] = OutDirect },
-        };
+            });
+        }
 
         var log = new JsonObject { ["level"] = "info" };
         if (!string.IsNullOrWhiteSpace(logFilePath)) log["output"] = logFilePath;
@@ -109,12 +137,7 @@ public static class SingBoxConfigBuilder
         var cfg = new JsonObject
         {
             ["log"] = log,
-            ["dns"] = new JsonObject
-            {
-                // sing-box 1.12+ removed the legacy "address" DNS format; the new
-                // format uses a "type" field instead.
-                ["servers"] = new JsonArray(new JsonObject { ["type"] = "local", ["tag"] = "local" }),
-            },
+            ["dns"] = DnsConfig(s.DnsChoice),
             ["inbounds"] = inbounds,
             ["outbounds"] = outbounds,
             ["route"] = new JsonObject
@@ -126,6 +149,83 @@ public static class SingBoxConfigBuilder
         };
         return cfg.ToJsonString(Indented);
     }
+
+    /// <summary>
+    /// sing-box 1.12+ DNS config for the chosen resolver. "auto" keeps system/local DNS;
+    /// plain IPs use type udp; DoH choices use type https.
+    /// </summary>
+    public static JsonObject DnsConfig(string choice)
+    {
+        var servers = new JsonArray();
+        if (string.IsNullOrWhiteSpace(choice) || choice == "auto")
+        {
+            servers.Add(new JsonObject { ["type"] = "local", ["tag"] = "local" });
+        }
+        else if (choice.StartsWith("doh:", StringComparison.Ordinal))
+        {
+            var host = choice[4..];
+            var tag = "doh";
+            var url = host switch
+            {
+                "1.1.1.1" => "https://cloudflare-dns.com/dns-query",
+                "8.8.8.8" => "https://dns.google/dns-query",
+                "9.9.9.9" => "https://dns.quad9.net/dns-query",
+                _ => "https://" + host + "/dns-query",
+            };
+            servers.Add(new JsonObject { ["type"] = "https", ["tag"] = tag, ["server"] = host });
+            // The https server type in sing-box 1.12+: address via url field.
+            var entry = (servers[0] as JsonObject)!;
+            entry["url"] = url;
+        }
+        else
+        {
+            servers.Add(new JsonObject { ["type"] = "udp", ["tag"] = "dns", ["server"] = choice });
+        }
+        return new JsonObject { ["servers"] = servers };
+    }
+
+    /// <summary>
+    /// Builds the single-protocol proxy outbound for native sing-box hosting
+    /// (Hysteria2 / TUIC). Used when Xray cannot run the selected profile.
+    /// </summary>
+    public static JsonObject NativeProxyOutbound(Profile p, string tag)
+    {
+        var tls = new JsonObject
+        {
+            ["enabled"] = true,
+            ["server_name"] = string.IsNullOrWhiteSpace(p.Sni) ? p.Address : p.Sni,
+            ["insecure"] = p.AllowInsecure,
+        };
+        var alpn = string.IsNullOrWhiteSpace(p.Alpn) ? null : new JsonArray(p.Alpn.Split(',').Select(a => (JsonNode)a.Trim()).Where(a => a.ToString().Length > 0).ToArray());
+        if (alpn is not null && alpn.Count > 0) tls["alpn"] = alpn;
+
+        return new JsonObject
+        {
+            ["tag"] = tag,
+            ["type"] = p.Protocol switch
+            {
+                ProfileProtocol.Hysteria2 => "hysteria2",
+                ProfileProtocol.Tuic => "tuic",
+                _ => "direct",
+            },
+            ["server"] = p.Address,
+            ["server_port"] = p.Port,
+            ["password"] = p.Password,
+            ["uuid"] = p.Protocol switch { ProfileProtocol.Tuic => p.Uuid, _ => null },
+            ["congestion_control"] = p.Protocol switch
+            {
+                ProfileProtocol.Tuic => string.IsNullOrWhiteSpace(p.CongestionControl) ? "bbr" : p.CongestionControl,
+                _ => null,
+            },
+            ["obfs"] = string.IsNullOrEmpty(p.ObfsPassword) ? null : new JsonObject { ["type"] = "salamander", ["password"] = p.ObfsPassword },
+            ["tls"] = tls,
+        };
+    }
+
+    /// <summary>True when the selected profile must run natively inside sing-box (not via Xray).</summary>
+    public static bool IsNativeProxy(Profile? p, ConnectionMode mode) =>
+        p is not null && mode == ConnectionMode.V2RayOnly &&
+        (p.Protocol is ProfileProtocol.Hysteria2 or ProfileProtocol.Tuic);
 
     private static JsonObject ProcessRule(IEnumerable<string> processes, string outbound)
     {

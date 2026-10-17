@@ -116,6 +116,7 @@ public partial class MainWindow : Window
             ModePsiphon.IsChecked == true ? ConnectionMode.PsiphonOnly :
             ModeAfter.IsChecked == true ? ConnectionMode.PsiphonAfter :
             ModeBefore.IsChecked == true ? ConnectionMode.PsiphonBefore :
+            ModeWarp.IsChecked == true ? ConnectionMode.WarpBefore :
             ConnectionMode.V2RayOnly;
         ModeHint.Text = ModeHintFor(ViewModel.Mode);
     }
@@ -128,6 +129,7 @@ public partial class MainWindow : Window
             case ConnectionMode.PsiphonOnly: ModePsiphon.IsChecked = true; break;
             case ConnectionMode.PsiphonAfter: ModeAfter.IsChecked = true; break;
             case ConnectionMode.PsiphonBefore: ModeBefore.IsChecked = true; break;
+            case ConnectionMode.WarpBefore: ModeWarp.IsChecked = true; break;
             default: ModeV2ray.IsChecked = true; break;
         }
         _loadingUi = false;
@@ -140,6 +142,7 @@ public partial class MainWindow : Window
         ConnectionMode.PsiphonOnly => Loc.T("Everything goes through the Psiphon network."),
         ConnectionMode.PsiphonAfter => Loc.T("Psiphon dials out through your VLESS line."),
         ConnectionMode.PsiphonBefore => Loc.T("Your VLESS line dials through Psiphon first."),
+        ConnectionMode.WarpBefore => Loc.T("Your VLESS line dials out over the Cloudflare WARP tunnel."),
         _ => "",
     };
 
@@ -212,6 +215,8 @@ public partial class MainWindow : Window
             _ => App.Settings.SystemProxyEnabled ? Loc.T("system proxy") : Loc.T("split tunnel: off"),
         };
 
+        IpCheckHint.Text = ViewModel.IpCheckText;
+
         // Sidebar dots
         SideDotXray.Fill = xrayUp ? DotGreen : (Brush)FindResource("IdleDot");
         SideXray.Text = xrayUp ? $"{Loc.T("Xray")} · {Loc.T("running")}" : Loc.T("Xray");
@@ -271,6 +276,21 @@ public partial class MainWindow : Window
         PortPsiSocks.Text = s.Ports.PsiphonSocksPort.ToString();
         PortPsiHttp.Text = s.Ports.PsiphonHttpPort.ToString();
 
+        DnsBox.SelectedIndex = s.DnsChoice switch
+        {
+            "1.1.1.1" => 1,
+            "doh:1.1.1.1" => 2,
+            "8.8.8.8" => 3,
+            "doh:8.8.8.8" => 4,
+            "9.9.9.9" => 5,
+            "doh:9.9.9.9" => 6,
+            _ => 0,
+        };
+        WarpKey.Text = s.Warp.PrivateKey;
+        WarpAddr.Text = s.Warp.Address;
+        WarpRes.Text = s.Warp.Reserved;
+        SubHoursBox.SelectedIndex = s.SubscriptionUpdateHours switch { 6 => 1, 12 => 2, 24 => 3, 0 => 4, _ => 2 };
+        RefreshSubscriptions();
         ChkAutoConnect.IsChecked = s.AutoConnectOnStart;
         ChkMinToTray.IsChecked = s.MinimizeToTray;
         ChkCompactStart.IsChecked = s.CompactOnStart;
@@ -360,6 +380,76 @@ public partial class MainWindow : Window
         s.Psiphon.RemoteServerListUrl = PsiRsl.Text.Trim();
         s.Psiphon.CustomConfigJson = PsiCustom.Text;
         App.SaveSettings();
+    }
+
+    private void OnDnsChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingUi || DnsBox?.SelectedItem is not ComboBoxItem item) return;
+        if (item.Tag is string tag) App.Settings.DnsChoice = tag;
+        App.SaveSettings();
+    }
+
+    private void OnWarpChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        App.Settings.Warp.PrivateKey = WarpKey.Text.Trim();
+        App.Settings.Warp.Address = WarpAddr.Text.Trim();
+        App.Settings.Warp.Reserved = WarpRes.Text.Trim();
+        App.SaveSettings();
+    }
+
+    private void OnWarpImportClick(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "WireGuard conf|*.conf;*.ini;*.*" };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            var text = File.ReadAllText(dlg.FileName);
+            if (ProfileUrlParser.TryParseWireGuardConf(text, out var p))
+            {
+                WarpKey.Text = p.WgPrivateKey;
+                WarpAddr.Text = p.WgAddress;
+                WarpRes.Text = p.Reserved;
+                ViewModel.AddWarpProfile(p);
+                ToastWindow.Show(Loc.T("WARP conf imported."));
+            }
+            else
+            {
+                MessageBox.Show(Loc.T("Could not read the WireGuard config (missing PrivateKey/PublicKey/Endpoint)."), "Toonel");
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Toonel");
+        }
+    }
+
+    private void OnSubscriptionIntervalChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingUi || SubHoursBox?.SelectedItem is not ComboBoxItem item) return;
+        if (int.TryParse(item.Tag as string, out var h)) App.Settings.SubscriptionUpdateHours = h;
+        App.SaveSettings();
+    }
+
+    private void OnSubUpdateClick(object sender, RoutedEventArgs e)
+    {
+        _ = ViewModel.UpdateSubscriptionsCommand.ExecuteAsync(null);
+    }
+
+    private void RefreshSubscriptions()
+    {
+        var subs = App.Settings.Subscriptions;
+        SubList.Text = subs.Count == 0
+            ? Loc.T("No subscriptions yet.")
+            : string.Join("\n", subs.Select(x => SubLine(x)));
+    }
+
+    private static string SubLine(SubscriptionInfo x)
+    {
+        var traffic = x.TotalBytes == -1 && x.UploadBytes == -1
+            ? " · "
+            : " · " + SubscriptionClient.FormatTraffic(x.DownloadBytes, x.UploadBytes, x.TotalBytes, x.ExpiresUnix);
+        return $"{x.Name}{traffic}  ({x.ProfileCount} servers, updated {x.LastUpdated})";
     }
 
     private void OnPortChanged(object sender, RoutedEventArgs e)
@@ -507,6 +597,19 @@ public partial class MainWindow : Window
         ThemeDarkText.Text = Loc.IsFa ? "تاریک" : "Dark";
 
         LanguageLabel.Text = Loc.IsFa ? "زبان" : "LANGUAGE";
+        DnsLabel.Text = Loc.T("DNS");
+        BtnCheckIp.Content = Loc.T("Check IP");
+        IpCheckHint.Text = ViewModel.IpCheckText;
+        WarpLabel.Text = Loc.T("WARP CHAIN HOP");
+        WarpKeyLabel.Text = Loc.T("Private key (base64)");
+        WarpAddrLabel.Text = Loc.T("Interface address");
+        WarpResLabel.Text = Loc.T("Reserved bytes");
+        BtnWarpImport.Content = Loc.T("Import from WireGuard conf…");
+        WarpHint.Text = Loc.T("Generate with wgcf (register + generate). Used by the V2Ray-over-WARP mode.");
+        SubLabel.Text = Loc.T("SUBSCRIPTIONS");
+        BtnSubUpdate.Content = Loc.T("Update all");
+        SubHint.Text = Loc.T("Paste a subscription URL via Import from clipboard. Auto-refresh happens on start and every N hours (Settings).");
+
         PortsLabel.Text = Loc.T("PORTS");
         PortLabel1.Text = Loc.T("Main SOCKS");
         PortLabel2.Text = Loc.T("Main HTTP");

@@ -12,6 +12,8 @@ public enum ConnectionMode
     PsiphonAfter,
     /// <summary>V2Ray over Psiphon: the Xray proxy outbound dials through Psiphon's local SOCKS (dialerProxy).</summary>
     PsiphonBefore,
+    /// <summary>V2Ray over WARP: the Xray proxy outbound dials through the WireGuard/WARP hop (dialerProxy).</summary>
+    WarpBefore,
 }
 
 public sealed class PortSettings
@@ -54,6 +56,40 @@ public sealed class PsiphonSettings
     public string CustomConfigJson { get; set; } = "";
 }
 
+/// <summary>
+/// Cloudflare WARP hop credentials, produced by wgcf (register + generate) or any WARP
+/// WireGuard account. Peer key/endpoint are the fixed Cloudflare WARP values; only the
+/// account-issued private key, interface address and reserved bytes differ per user.
+/// </summary>
+public static class WarpDefaults
+{
+    public const string PeerPublicKey = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=";
+    public const string EndpointHost = "engage.cloudflareclient.com";
+    public const int EndpointPort = 2408;
+    public const int Mtu = 1280;
+}
+
+public sealed class WarpSettings
+{
+    public string PrivateKey { get; set; } = "";   // base64 private key from the WARP account
+    public string Address { get; set; } = "";      // e.g. 172.16.0.2/32
+    public string Reserved { get; set; } = "";     // 3 bytes (base64 or "1,2,3") from the account
+}
+
+/// <summary>A configured subscription URL with the traffic/expire info the server reports.</summary>
+public sealed class SubscriptionInfo
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Url { get; set; } = "";
+    public string Name { get; set; } = "";
+    public long UploadBytes { get; set; } = -1;
+    public long DownloadBytes { get; set; } = -1;
+    public long TotalBytes { get; set; } = -1;
+    public long ExpiresUnix { get; set; } = -1;
+    public string LastUpdated { get; set; } = "";
+    public int ProfileCount { get; set; }
+}
+
 public sealed class AppSettings
 {
     public PortSettings Ports { get; set; } = new();
@@ -83,6 +119,15 @@ public sealed class AppSettings
     public bool CompactOnStart { get; set; }
 
     public ObservableCollection<Profile> Profiles { get; set; } = new();
+    public List<SubscriptionInfo> Subscriptions { get; set; } = new();
+    public WarpSettings Warp { get; set; } = new();
+
+    /// <summary>DNS resolver: "auto" (system/local), plain UDP ("1.1.1.1","8.8.8.8","9.9.9.9")
+    /// or DoH ("doh:1.1.1.1","doh:8.8.8.8","doh:9.9.9.9").</summary>
+    public string DnsChoice { get; set; } = "auto";
+
+    /// <summary>Auto-refresh subscriptions on app start and every N hours (0 = off).</summary>
+    public int SubscriptionUpdateHours { get; set; } = 12;
 
     public Profile? SelectedProfile =>
         Profiles.FirstOrDefault(p => p.Id == SelectedProfileId) ?? Profiles.FirstOrDefault();

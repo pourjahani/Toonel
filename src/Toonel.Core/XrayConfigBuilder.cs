@@ -29,6 +29,7 @@ public static class XrayConfigBuilder
     public const string InMainSocks = "in-main-socks";
     public const string InMainHttp = "in-main-http";
     public const string InVlessOnly = "in-vless-only";
+    public const string OutWarp = "warp-out";
 
     public static string Build(AppSettings s, ConnectionMode mode)
     {
@@ -50,6 +51,19 @@ public static class XrayConfigBuilder
         else
         {
             var proxy = ProxyOutbound(s.SelectedProfile, mode == ConnectionMode.PsiphonBefore ? s.Ports.PsiphonSocksPort : null);
+            if (mode == ConnectionMode.WarpBefore)
+            {
+                var streamAnchor = proxy["streamSettings"] as JsonObject;
+                var sockopt = streamAnchor is not null && streamAnchor.TryGetPropertyValue("sockopt", out var so) && so is JsonObject so2 ? so2 : null;
+                if (sockopt is null)
+                {
+                    sockopt = new JsonObject();
+                    if (streamAnchor is not null) streamAnchor["sockopt"] = sockopt;
+                    else proxy.Add("streamSettings", new JsonObject { ["sockopt"] = sockopt });
+                }
+                sockopt["dialerProxy"] = OutWarp;
+                outbounds.Add(WarpOutbound(s));
+            }
             outbounds.Add(proxy);
             mainOut = OutProxy;
         }
@@ -69,6 +83,7 @@ public static class XrayConfigBuilder
         var cfg = new JsonObject
         {
             ["log"] = new JsonObject { ["loglevel"] = "warning" },
+            ["dns"] = DnsEntry(s.DnsChoice),
             ["inbounds"] = inbounds,
             ["outbounds"] = outbounds,
             ["routing"] = routing,
@@ -130,7 +145,102 @@ public static class XrayConfigBuilder
         ["settings"] = new JsonObject(),
     };
 
-    private static JsonObject PsiphonOutbound(AppSettings s) => new()
+        /// <summary>Xray dns block for the chosen resolver (auto keeps system DNS).</summary>
+    public static JsonObject? DnsEntry(string choice)
+    {
+        var addr = choice switch
+        {
+            "doh:1.1.1.1" => "https://cloudflare-dns.com/dns-query",
+            "doh:8.8.8.8" => "https://dns.google/dns-query",
+            "doh:9.9.9.9" => "https://dns.quad9.net/dns-query",
+            "1.1.1.1" => "1.1.1.1",
+            "8.8.8.8" => "8.8.8.8",
+            "9.9.9.9" => "9.9.9.9",
+            _ => null,
+        };
+        if (addr is null) return null;
+        return new JsonObject { ["servers"] = new JsonArray(addr) };
+    }
+
+    /// <summary>Xray wireguard settings (keys in hex; accepts base64 input).</summary>
+    public static JsonObject WireGuardSettings(Profile p)
+    {
+        var peer = new JsonObject
+        {
+            ["publicKey"] = B64ToHex(p.WgPeerPublicKey),
+            ["endpoint"] = $"{p.Address}:{p.Port}",
+        };
+        if (TryReservedBytes(p.Reserved, out var reserved))
+            peer["reserved"] = new JsonArray(reserved.Select(b => JsonValue.Create((int)b)).ToArray());
+        var settings = new JsonObject
+        {
+            ["secretKey"] = B64ToHex(p.WgPrivateKey),
+            ["mtu"] = Models.WarpDefaults.Mtu,
+            ["peers"] = new JsonArray(peer),
+        };
+        if (!string.IsNullOrWhiteSpace(p.WgAddress))
+            settings["address"] = new JsonArray(p.WgAddress);
+        return settings;
+    }
+
+    /// <summary>Cloudflare WARP hop outbound built from the saved WarpSettings.</summary>
+    public static JsonObject WarpOutbound(AppSettings s)
+    {
+        var p = new Profile
+        {
+            Protocol = ProfileProtocol.WireGuard,
+            Address = Models.WarpDefaults.EndpointHost,
+            Port = Models.WarpDefaults.EndpointPort,
+            WgPrivateKey = s.Warp.PrivateKey,
+            WgPeerPublicKey = Models.WarpDefaults.PeerPublicKey,
+            WgAddress = s.Warp.Address,
+            Reserved = s.Warp.Reserved,
+        };
+        return new JsonObject
+        {
+            ["tag"] = OutWarp,
+            ["protocol"] = "wireguard",
+            ["settings"] = WireGuardSettings(p),
+        };
+    }
+
+    internal static string B64ToHex(string b64)
+    {
+        if (string.IsNullOrWhiteSpace(b64)) return "";
+        var trimmed = b64.Trim();
+        if (trimmed.Length % 2 == 0 && trimmed.All(Uri.IsHexDigit)) return trimmed.ToLowerInvariant();
+        var bytes = Convert.FromBase64String(trimmed);
+        var sb = new System.Text.StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes) sb.Append(b.ToString("x2"));
+        return sb.ToString();
+    }
+
+    internal static bool TryReservedBytes(string reserved, out byte[] bytes)
+    {
+        bytes = Array.Empty<byte>();
+        if (string.IsNullOrWhiteSpace(reserved)) return false;
+        var r = reserved.Trim();
+        if (r.Contains(","))
+        {
+            var parts = r.Split(",");
+            var list = new byte[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+                if (!byte.TryParse(parts[i].Trim(), out list[i])) return false;
+            bytes = list;
+            return list.Length == 3;
+        }
+        try
+        {
+            bytes = Convert.FromBase64String(r.PadRight(r.Length + (4 - r.Length % 4) % 4, '='));
+            return bytes.Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+private static JsonObject PsiphonOutbound(AppSettings s) => new()
     {
         ["tag"] = OutPsiphon,
         ["protocol"] = "socks",
@@ -203,6 +313,11 @@ public static class XrayConfigBuilder
                 };
                 break;
 
+            case ProfileProtocol.WireGuard:
+                users = new JsonObject();
+                settings = WireGuardSettings(p);
+                break;
+
             case ProfileProtocol.Http:
                 settings = new JsonObject
                 {
@@ -237,6 +352,7 @@ public static class XrayConfigBuilder
             ["protocol"] = p.Protocol switch
             {
                 ProfileProtocol.Vless => "vless",
+                ProfileProtocol.WireGuard => "wireguard",
                 ProfileProtocol.Vmess => "vmess",
                 ProfileProtocol.Trojan => "trojan",
                 ProfileProtocol.Shadowsocks => "shadowsocks",

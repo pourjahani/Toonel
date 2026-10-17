@@ -38,6 +38,14 @@ public static class Program
         PsiphonCountries_Normalize();
         PsiphonCountries_Emoji();
         ShareLink_VlessRoundTrip();
+        Run("Parse_Hy2", Parse_Hy2);
+        Run("Parse_Tuic", Parse_Tuic);
+        Run("ShareLink_Hy2TuicWg", ShareLink_Hy2TuicWg);
+        Run("Parse_WireGuardConf", Parse_WireGuardConf);
+        Run("ClashParser_FlowAndBlock", ClashParser_FlowAndBlock);
+        Run("Xray_WarpChain_Dns", Xray_WarpChain_Dns);
+        Run("SingBox_NativeHy2_Dns", SingBox_NativeHy2_Dns);
+        Run("SubClient_ParsesClashAndUserinfo", SubClient_ParsesClashAndUserinfo);
         ShareLink_VmessAndSs();
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed");
@@ -429,5 +437,133 @@ public static class Program
         var profiles = ProfileUrlParser.ParseMany(blob);
         Check(profiles.Count == 2, "subscription base64 blob -> 2 profiles");
         Check(profiles[0].Name == "A" && profiles[1].Name == "B", "subscription remarks kept");
+    }
+    private static void Parse_Hy2()
+
+    {
+        var ok = ProfileUrlParser.TryParse("hysteria2://secretpass@hy2.example.com:443?sni=hy2.example.com&insecure=1&obfs=salamander&obfs-password=obfs8#MyHy2", out var p);
+        Check(ok, "hy2: parsed");
+        Check(p.Protocol == ProfileProtocol.Hysteria2 && p.Address == "hy2.example.com" && p.Port == 443, "hy2: fields");
+        Check(p.Password == "secretpass" && p.Sni == "hy2.example.com" && p.AllowInsecure, "hy2: auth/sni/insecure");
+        Check(p.ObfsPassword == "obfs8", "hy2: obfs password");
+        Check(p.Network.Contains("obfs"), "hy2: network marked obfs");
+        var ok2 = ProfileUrlParser.TryParse("hy2://p2@h2.example.com:8443#Alt", out var p2);
+        Check(ok2 && p2.Protocol == ProfileProtocol.Hysteria2 && p2.Password == "p2", "hy2: alias scheme");
+    }
+
+    private static void Parse_Tuic()
+    {
+        var ok = ProfileUrlParser.TryParse("tuic://11111111-2222-3333-4444-555555555555:pw@tuic.example.com:4443?congestion_control=bbr&alpn=h3&sni=tuic.example.com&allow_insecure=1#T", out var p);
+        Check(ok, "tuic: parsed");
+        Check(p.Protocol == ProfileProtocol.Tuic && p.Uuid == "11111111-2222-3333-4444-555555555555" && p.Password == "pw", "tuic: fields");
+        Check(p.CongestionControl == "bbr" && p.Alpn == "h3" && p.Sni == "tuic.example.com" && p.AllowInsecure, "tuic: options");
+    }
+
+    private static void ShareLink_Hy2TuicWg()
+    {
+        var h = new Profile { Name = "H", Protocol = ProfileProtocol.Hysteria2, Address = "h.example.com", Port = 443, Password = "pw", Sni = "h.example.com", ObfsPassword = "ob8" };
+        var hl = ProfileShareLink.Build(h);
+        var hok = ProfileUrlParser.TryParse(hl, out var hb);
+        Check(hok && hb.Protocol == ProfileProtocol.Hysteria2 && hb.Password == "pw" && hb.ObfsPassword == "ob8", "share: hy2 round-trip");
+        Check(hb.Security == "tls" && hb.Name == "H", "share: hy2 sni/name");
+
+        var t = new Profile { Name = "T", Protocol = ProfileProtocol.Tuic, Address = "t.example.com", Port = 8443, Uuid = "11111111-2222-3333-4444-555555555555", Password = "tpw", CongestionControl = "bbr", Alpn = "h3" };
+        var tl = ProfileShareLink.Build(t);
+        var tok = ProfileUrlParser.TryParse(tl, out var tb);
+        Check(tok && tb.Protocol == ProfileProtocol.Tuic && tb.Uuid == t.Uuid && tb.Password == "tpw", "share: tuic round-trip");
+        Check(tb.CongestionControl == "bbr" && tb.Alpn == "h3", "share: tuic options");
+
+        var w = new Profile { Name = "W", Protocol = ProfileProtocol.WireGuard, Address = "engage.cloudflareclient.com", Port = 2408, WgPrivateKey = "eC0xbXlwS2V5X2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6azA9", WgPeerPublicKey = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=", WgAddress = "172.16.0.2/32", Reserved = "AA==" };
+        var wl = ProfileShareLink.Build(w);
+        var wok = ProfileUrlParser.TryParse(wl, out var wb);
+        Check(wok && wb.Protocol == ProfileProtocol.WireGuard && wb.Address == w.Address && wb.Port == 2408, "share: wg round-trip");
+        Check(wb.WgPrivateKey == w.WgPrivateKey && wb.WgPeerPublicKey == w.WgPeerPublicKey && wb.WgAddress == "172.16.0.2/32", "share: wg keys");
+    }
+    private static void Parse_WireGuardConf()
+    {
+        var conf = "[Interface]\nPrivateKey = eC0xbXlwS2V5X2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6azA9\nAddress = 172.16.0.2/32\n\n[Peer]\nPublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=\nEndpoint = engage.cloudflareclient.com:2408\nReserved = AA==\n";
+        var ok = ProfileUrlParser.TryParseWireGuardConf(conf, out var p);
+        Check(ok, "wg conf: parsed");
+        Check(p.Protocol == ProfileProtocol.WireGuard && p.Address == "engage.cloudflareclient.com" && p.Port == 2408, "wg conf: endpoint");
+        Check(p.WgAddress == "172.16.0.2/32" && p.Reserved == "AA==", "wg conf: address/reserved");
+        var many = ProfileUrlParser.ParseMany(conf);
+        Check(many.Count == 1 && many[0].Protocol == ProfileProtocol.WireGuard, "wg conf: ParseMany detects conf");
+    }
+
+    private static void ClashParser_FlowAndBlock()
+    {
+        var flow = "proxies:\n  - {type: ss, name: S1, server: 1.2.3.4, port: 8388, cipher: aes-256-gcm, password: pw1}\n  - {type: trojan, name: T1, server: t.ex, port: 443, password: tpw, sni: t.ex}\n";
+        var f = ClashConfigParser.Parse(flow);
+        Check(f.Count == 2, "clash flow: 2 proxies");
+        Check(f[0].Protocol == ProfileProtocol.Shadowsocks && f[0].Address == "1.2.3.4" && f[0].Port == 8388, "clash flow: ss fields");
+        Check(f[0].SsMethod == "aes-256-gcm" && f[0].Password == "pw1", "clash flow: ss cipher/pass");
+        Check(f[1].Protocol == ProfileProtocol.Trojan && f[1].Password == "tpw" && f[1].Security == "tls", "clash flow: trojan");
+
+        var block = "proxies:\n  - name: L1\n    type: vless\n    server: v.ex\n    port: 443\n    uuid: u-123\n    tls: true\n    flow: xtls-rprx-vision\n\nproxies2:\n  - x\n";
+        var b = ClashConfigParser.Parse(block);
+        Check(b.Count == 1, "clash block: 1 proxy");
+        Check(b[0].Protocol == ProfileProtocol.Vless && b[0].Uuid == "u-123" && b[0].Flow == "xtls-rprx-vision" && b[0].Security == "tls", "clash block: vless fields");
+
+        Check(ClashConfigParser.Parse("proxies:\n  - {type: socks5, server: 1.1.1.1, port: 1080}\n").Count == 0, "clash: unsupported type skipped");
+    }
+    private static void Xray_WarpChain_Dns()
+    {
+        var s = Settings();
+        s.Warp = new WarpSettings { PrivateKey = "w2Z0bXBDbGllbnRLZXlCIGFzZGZhc2RmYXNkZg==", Address = "172.16.0.2/32", Reserved = "AQQ=" }; s.DnsChoice = "1.1.1.1";
+        s.SelectedProfileId = s.Profiles[0].Id;
+        var cfg = JsonNode.Parse(XrayConfigBuilder.Build(s, ConnectionMode.WarpBefore)).AsObject();
+        var OB = cfg["outbounds"].AsArray();
+        var warp = OB.First(o => o["tag"].GetValue<string>() == "warp-out");
+        Check(warp["protocol"].GetValue<string>() == "wireguard", "warp: outbound is wireguard");
+        var ws = warp["settings"].AsObject();
+        Check(ws["secretKey"].GetValue<string>().All(Uri.IsHexDigit), "warp: secretKey hex");
+        Check(ws["peers"][0]["endpoint"].GetValue<string>() == "engage.cloudflareclient.com:2408", "warp: endpoint");
+        Check(ws["peers"][0]["publicKey"].GetValue<string>().All(Uri.IsHexDigit), "warp: peer key hex");
+        var proxy = OB.First(o => o["tag"].GetValue<string>() == "proxy-out");
+        Check(proxy["streamSettings"]["sockopt"]["dialerProxy"].GetValue<string>() == "warp-out", "warp: dialerProxy wired");
+
+        var dnsCfg = JsonNode.Parse(XrayConfigBuilder.Build(s, ConnectionMode.V2RayOnly)).AsObject();
+        Check(dnsCfg["dns"]["servers"][0].GetValue<string>() == "1.1.1.1", "xray dns: udp server");
+        Check(XrayConfigBuilder.DnsEntry("auto") is null, "xray dns: auto = no dns block");
+    }
+
+    private static void SingBox_NativeHy2_Dns()
+    {
+        var s = Settings();
+        s.Profiles.Clear();
+        s.Profiles.Add(new Profile { Name = "H", Protocol = ProfileProtocol.Hysteria2, Address = "h.example.com", Port = 443, Password = "pw", Sni = "h.example.com", ObfsPassword = "ob8" });
+        s.SelectedProfileId = s.Profiles[0].Id;
+        var cfg = JsonNode.Parse(SingBoxConfigBuilder.Build(s, ConnectionMode.V2RayOnly, withTun: false)).AsObject();
+        var outs = cfg["outbounds"].AsArray();
+        var hy = outs.First(o => o["tag"].GetValue<string>() == "xray");
+        Check(hy["type"].GetValue<string>() == "hysteria2", "singbox native: hysteria2 outbound");
+        Check(hy["server"].GetValue<string>() == "h.example.com" && hy["password"].GetValue<string>() == "pw", "singbox native: server/password");
+        Check(hy["tls"]["enabled"].GetValue<bool>() && hy["tls"]["server_name"].GetValue<string>() == "h.example.com", "singbox native: tls");
+        Check(hy["obfs"]["type"].GetValue<string>() == "salamander" && hy["obfs"]["password"].GetValue<string>() == "ob8", "singbox native: obfs");
+        Check(!outs.Any(o => o["type"].GetValue<string>() == "socks"), "singbox native: no legacy xray socks outbound");
+        var ins = cfg["inbounds"].AsArray();
+        Check(ins.Any(i => i["type"].GetValue<string>() == "socks" && i["listen_port"].GetValue<int>() == 10808), "singbox native: socks inbound 10808");
+        Check(!ins.Any(i => i["type"].GetValue<string>() == "tun"), "singbox native: no tun when withTun false");
+
+        var d = SingBoxConfigBuilder.DnsConfig("1.1.1.1");
+        Check(d["servers"][0]["type"].GetValue<string>() == "udp" && d["servers"][0]["server"].GetValue<string>() == "1.1.1.1", "singbox dns: udp");
+        var d2 = SingBoxConfigBuilder.DnsConfig("doh:9.9.9.9");
+        Check(d2["servers"][0]["type"].GetValue<string>() == "https" && d2["servers"][0]["url"].GetValue<string>().Contains("quad9"), "singbox dns: doh");
+        var d3 = SingBoxConfigBuilder.DnsConfig("auto");
+        Check(d3["servers"][0]["type"].GetValue<string>() == "local", "singbox dns: local");
+    }
+
+    private static void SubClient_ParsesClashAndUserinfo()
+    {
+        var clash = "proxies:\n- {type: ss, name: S1, server: 1.2.3.4, port: 8388, cipher: aes-256-gcm, password: pw1}\n";
+        var (profiles, format) = SubscriptionClient.ParseSubscriptionText(clash);
+        Check(profiles.Count == 1 && format == "clash", "sub: clash format detected");
+
+        var links = "vless://u@example.com:443?security=tls#A\n" + "ss://" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("aes-256-gcm:pw@2.2.2.2:8388")) + "#B";
+        var (p2, fmt2) = SubscriptionClient.ParseSubscriptionText(links);
+        Check(p2.Count == 2 && fmt2 == "links", "sub: links format");
+
+        Check(SubscriptionClient.FormatTraffic(-1, -1, -1, 0).Length == 0, "sub: no traffic line when no data");
+        Check(SubscriptionClient.ValidateUrl("notaurl") != null && SubscriptionClient.ValidateUrl("https://x/y") == null, "sub: url validation");
     }
 }

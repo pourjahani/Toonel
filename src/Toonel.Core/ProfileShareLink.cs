@@ -18,6 +18,9 @@ public static class ProfileShareLink
             ProfileProtocol.Trojan => BuildStandard(p, "trojan"),
             ProfileProtocol.Vmess => BuildVmess(p),
             ProfileProtocol.Shadowsocks => BuildSs(p),
+            ProfileProtocol.Hysteria2 => BuildHy2(p),
+            ProfileProtocol.Tuic => BuildTuic(p),
+            ProfileProtocol.WireGuard => BuildWg(p),
             _ => "",
         };
     }
@@ -66,6 +69,53 @@ public static class ProfileShareLink
 
         var name = string.IsNullOrWhiteSpace(p.Name) ? $"{scheme}:{p.Address}" : p.Name;
         sb.Append('#').Append(Uri.EscapeDataString(name));
+        return sb.ToString();
+    }
+
+    private static string BuildHy2(Profile p)
+    {
+        var sb = new StringBuilder();
+        sb.Append("hysteria2://").Append(Uri.EscapeDataString(p.Password));
+        sb.Append('@').Append(p.Address).Append(':').Append(p.Port);
+        var q = new List<string>();
+        if (!string.IsNullOrEmpty(p.Sni)) q.Add("sni=" + Uri.EscapeDataString(p.Sni));
+        if (p.AllowInsecure) q.Add("insecure=1");
+        if (!string.IsNullOrEmpty(p.ObfsPassword))
+        {
+            q.Add("obfs=salamander");
+            q.Add("obfs-password=" + Uri.EscapeDataString(p.ObfsPassword));
+        }
+        if (q.Count > 0) sb.Append('?').AppendJoin('&', q);
+        sb.Append('#').Append(Uri.EscapeDataString(string.IsNullOrWhiteSpace(p.Name) ? $"hy2:{p.Address}" : p.Name));
+        return sb.ToString();
+    }
+
+    private static string BuildTuic(Profile p)
+    {
+        var sb = new StringBuilder();
+        sb.Append("tuic://").Append(Uri.EscapeDataString(p.Uuid)).Append(':').Append(Uri.EscapeDataString(p.Password));
+        sb.Append('@').Append(p.Address).Append(':').Append(p.Port);
+        var q = new List<string>();
+        q.Add("congestion_control=" + (string.IsNullOrWhiteSpace(p.CongestionControl) ? "bbr" : p.CongestionControl));
+        q.Add("alpn=" + (string.IsNullOrWhiteSpace(p.Alpn) ? "h3" : p.Alpn));
+        if (!string.IsNullOrEmpty(p.Sni)) q.Add("sni=" + Uri.EscapeDataString(p.Sni));
+        if (p.AllowInsecure) q.Add("allow_insecure=1");
+        sb.Append('?').AppendJoin('&', q);
+        sb.Append('#').Append(Uri.EscapeDataString(string.IsNullOrWhiteSpace(p.Name) ? $"tuic:{p.Address}" : p.Name));
+        return sb.ToString();
+    }
+
+    private static string BuildWg(Profile p)
+    {
+        var sb = new StringBuilder();
+        sb.Append("wireguard://").Append(p.WgPrivateKey);
+        sb.Append('@').Append(p.Address).Append(':').Append(p.Port);
+        var q = new List<string>();
+        q.Add("peer=" + Uri.EscapeDataString(p.WgPeerPublicKey));
+        if (!string.IsNullOrEmpty(p.WgAddress)) q.Add("address=" + Uri.EscapeDataString(p.WgAddress));
+        if (!string.IsNullOrEmpty(p.Reserved)) q.Add("reserved=" + Uri.EscapeDataString(p.Reserved));
+        sb.Append('?').AppendJoin('&', q);
+        sb.Append('#').Append(Uri.EscapeDataString(string.IsNullOrWhiteSpace(p.Name) ? $"wg:{p.Address}" : p.Name));
         return sb.ToString();
     }
 

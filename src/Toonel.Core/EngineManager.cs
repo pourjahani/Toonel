@@ -88,7 +88,7 @@ public sealed class EngineManager
         var singboxCfg = Path.Combine(_runtimeDir, "config.singbox.json");
         File.WriteAllText(xrayCfg, XrayConfigBuilder.Build(s, mode));
         File.WriteAllText(psiphonCfg, PsiphonConfigBuilder.Build(s, mode));
-        File.WriteAllText(singboxCfg, SingBoxConfigBuilder.Build(s, mode, Path.Combine(_runtimeDir, "singbox.log")));
+File.WriteAllText(singboxCfg, SingBoxConfigBuilder.Build(s, mode, Path.Combine(_runtimeDir, "singbox.log"), s.TunEnabled));
         return singboxCfg;
     }
 
@@ -102,6 +102,7 @@ public sealed class EngineManager
 
         _mode = mode;
         SetState(EngineState.Starting);
+        var native = SingBoxConfigBuilder.IsNativeProxy(s.SelectedProfile, mode);
         var psiphonOnly = mode == ConnectionMode.PsiphonOnly;
         var wantsPsiphon = psiphonOnly || mode is ConnectionMode.PsiphonAfter or ConnectionMode.PsiphonBefore;
 
@@ -120,6 +121,12 @@ public sealed class EngineManager
                     throw new InvalidOperationException($"psiphon exited early (code {_psiphon.ExitCode}). See psiphon log.");
                 _awaitingPsiphonTunnel = true;
                 _log.Add(SourceApp, $"psiphon started (socks :{s.Ports.PsiphonSocksPort}, http :{s.Ports.PsiphonHttpPort}) — waiting for tunnel…");
+            }
+            else if (native)
+            {
+                // Hysteria2/TUIC cannot run under Xray: sing-box hosts the local
+                // SOCKS/HTTP inbounds itself (same ports) and proxies natively.
+                _log.Add(SourceApp, $"native {s.SelectedProfile!.Protocol} mode — sing-box hosts the proxy (no xray).");
             }
             else
             {
@@ -148,11 +155,12 @@ public sealed class EngineManager
             }
 
             // 3. sing-box TUN (optional, needs admin for auto_route).
-            if (s.TunEnabled)
+            // Native hy2/tuic mode also requires sing-box as the proxy host (no TUN).
+            if (s.TunEnabled || native)
             {
                 try
                 {
-                    StartSingBox(s);
+                    StartSingBox(s, withTun: s.TunEnabled);
                     _tunActive = true;
                     _log.Add(SourceApp, "TUN mode active — whole-system traffic captured (terminals included).");
                 }
@@ -161,7 +169,7 @@ public sealed class EngineManager
                     _log.Add(SourceApp, $"TUN failed ({ex.Message}). Falling back to system proxy.");
                 }
             }
-            if (!_tunActive && s.SystemProxyEnabled)
+            if (!_tunActive && (s.SystemProxyEnabled || native))
             {
                 // Psiphon-only has no xray: point the system proxy at psiphon's own local proxy.
                 _activeHttpPort = psiphonOnly ? s.Ports.PsiphonHttpPort : s.Ports.MainHttpPort;
@@ -194,10 +202,10 @@ public sealed class EngineManager
         }
     }
 
-    private void StartSingBox(AppSettings s)
+    private void StartSingBox(AppSettings s, bool withTun = true)
     {
         var cfgPath = Path.Combine(_runtimeDir, "config.singbox.json");
-        File.WriteAllText(cfgPath, SingBoxConfigBuilder.Build(s, _mode, Path.Combine(_runtimeDir, "singbox.log")));
+        File.WriteAllText(cfgPath, SingBoxConfigBuilder.Build(s, _mode, Path.Combine(_runtimeDir, "singbox.log"), withTun));
 
         _singBox = new ProcessRunner(SourceSingBox, SingBoxPath);
         _singBox.OutputLine += line => _log.Add(SourceSingBox, line);
