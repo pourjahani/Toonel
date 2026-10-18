@@ -9,6 +9,7 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Toonel.App</RootNamespace>
     <AssemblyName>Toonel</AssemblyName>
+    <Version>1.2.0</Version>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <ApplicationManifest Condition="'$(Configuration)' == 'Release'">app.admin.manifest</ApplicationManifest>
     <ApplicationManifest Condition="'$(Configuration)' != 'Release'">app.manifest</ApplicationManifest>

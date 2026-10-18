@@ -8,9 +8,19 @@ Built with WPF on .NET 8. Inspired by v2rayN, PattNG, MahsaNG and the Psiphon cl
 
 ## Features
 
-- **V2Ray client**: profiles for VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP.
-  Import `vless://`, `vmess://` (base64), `trojan://`, `ss://` links from clipboard or file,
-  or paste a subscription URL / base64 blob. TCP ping per profile.
+- **V2Ray client**: profiles for VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP,
+  plus **Hysteria2** (`hysteria2://`/`hy2://`), **TUIC** and **WireGuard**. Import share
+  links from clipboard or file (including `wireguard://` URLs and WireGuard `.conf`
+  files); with Hysteria2/TUIC selected, sing-box hosts the local inbounds natively and
+  xray is skipped. TCP ping per profile.
+- **Subscriptions**: paste a subscription URL or base64 blob and it keeps itself fresh
+  (auto-update on start plus every N hours). Parses base64 / plain link lists, **Clash
+  YAML** (flow + block style; ss/trojan/vmess/vless) and **sing-box JSON**; shows the
+  server's **traffic used / expiry** from `Subscription-Userinfo`; a re-update only
+  replaces that subscription's profiles.
+- **DNS choice + leak test**: pick automatic / 1.1.1.1 / 8.8.8.8 / 9.9.9.9 (UDP or DoH) —
+  applied to both the Xray and sing-box configs — and run **Check IP** on the dashboard to
+  compare your direct IP vs the proxied one and flag a leak.
 - **Psiphon (official engine)**: runs the official `psiphon-tunnel-core` standalone client
   and exposes its local SOCKS/HTTP proxies. Settings for egress region, sponsor/propagation
   IDs, remote server list, and full custom `client.config` JSON overrides.
@@ -21,6 +31,7 @@ Built with WPF on .NET 8. Inspired by v2rayN, PattNG, MahsaNG and the Psiphon cl
   | Psiphon alone | apps → xray router → Psiphon network |
   | **Psiphon after V2Ray** | apps → xray → Psiphon → internet *(Psiphon dials through your vless line via its official `UpstreamProxyURL`)* |
   | **Psiphon before V2Ray** | apps → xray → vless → internet *(the vless connection itself is dialed through Psiphon via xray `dialerProxy`)* |
+  | **V2Ray over WARP** | apps → xray → vless → internet *(the vless connection itself is dialed through a Cloudflare WARP hop via a native Xray `wireguard` outbound + `dialerProxy`)* |
 - **Whole-system traffic**: sing-box TUN sidecar (wintun adapter, auto-route) captures
   everything — terminals, git, pip, npm, Docker. Fallback: classic Windows system proxy
   (WinINET) plus generated terminal env snippets (`HTTP_PROXY`, `git`, `npm`, `pip`).
@@ -98,8 +109,9 @@ Per-app routing requires TUN mode (admin/UAC), same as Proxifier itself.
 dotnet run --project tests/Toonel.Tests
 ```
 
-93 checks covering config generation for all four modes, anti-loop invariants, split
-tunnel rule ordering, Psiphon config merging, and all share-link parsers.
+140 checks covering config generation for every mode, anti-loop invariants, split
+tunnel rule ordering, Psiphon config merging, all share-link parsers (both directions),
+Clash YAML / sing-box JSON subscription parsing, and the leak tester.
 
 ## Honest limitations
 

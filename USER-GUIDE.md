@@ -16,8 +16,14 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
    instantly and are remembered.
 
 ### Add your server
-- **Import:** copy your server link (`vless://…`, `vmess://…`, `trojan://…`, `ss://…`) —
-  or a whole subscription URL — to the clipboard, then open **Profiles → Import from clipboard**.
+- **Import:** copy your server link (`vless://…`, `vmess://…`, `trojan://…`, `ss://…`,
+  `hysteria2://…` / `hy2://…`, `tuic://…`, `wireguard://…`) — or a whole subscription URL —
+  to the clipboard, then open **Profiles → Import from clipboard**. WireGuard configs
+  (`.conf` files saved from a VPN provider) can be imported too — pick **Import from file**.
+- **Subscriptions:** a pasted subscription URL keeps itself fresh — it re-checks on start
+  and every so often, the Profiles page shows the server's **traffic used / expiry**, and
+  an update only replaces that subscription's profiles. Clash YAML and sing-box JSON
+  subscription formats are parsed as well.
 - **Copy & paste:** select one or more profiles in the list (Ctrl/Shift+click for several),
   press **Ctrl+C** to copy them as share links, and **Ctrl+V** to import links from the
   clipboard. Duplicates are skipped automatically. Right-click also offers Copy/Paste.
@@ -33,6 +39,8 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
    - **Psiphon alone** — no server needed; everything goes through the Psiphon network.
    - **Psiphon after V2Ray** — your server first, Psiphon on top.
    - **Psiphon before V2Ray** — Psiphon first, your server on top.
+   - **V2Ray over WARP** — your server, with its own connection going through a
+     Cloudflare **WARP** hop first (select a WireGuard profile first, ideally Warp).
 2. Keep **Whole system (TUN)** checked — this routes *everything* (browsers, terminals,
    git, pip, npm) through the VPN. You can also enable **System proxy** (lighter, some
    apps bypass it) and **Block QUIC**.
@@ -45,6 +53,12 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
    connect attempt** — press it (dashboard or compact bar) to abort immediately: the
    attempt is cancelled, engines already started are shut down, and the app returns to
    DISCONNECTED without an error dialog.
+
+### DNS & leak check
+- **Settings → DNS** — pick automatic / 1.1.1.1 / 8.8.8.8 / 9.9.9.9, each as plain UDP
+  or the safer DoH variant. Both engines use it while connected.
+- On the **Dashboard**, press **Check IP** to compare your direct IP with the proxied
+  one — it flags a leak if your real address still shows while you are connected.
 
 ### Psiphon egress country
 - Open **Psiphon → Egress country** and pick the country your traffic should exit from —
@@ -123,8 +137,14 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
    به خاطر سپرده می‌شوند.
 
 ### اضافه کردن سرور
-- **ورود:** لینک سرور (`vless://…` یا `vmess://…` یا `trojan://…` یا `ss://…`) یا نشانی
-  اشتراک را کپی کنید و در بخش **سرورها** روی **ورود از کلیپ‌بورد** بزنید.
+- **ورود:** لینک سرور (`vless://…`، `vmess://…`، `trojan://…`، `ss://…`، `hysteria2://…`
+  یا `hy2://…`، `tuic://…`، `wireguard://…`) یا نشانی اشتراک را کپی کنید و در بخش
+  **سرورها** روی **ورود از کلیپ‌بورد** بزنید. فایل‌های WireGuard با پسوند `‎.conf` هم
+  با **ورود از فایل** قابل ورود هستند.
+- **اشتراک‌ها:** اگر نشانی اشتراک وارد کنید خودش به‌روز می‌ماند — در شروع برنامه و هر چند
+  ساعت یک‌بار دوباره بررسی می‌شود، صفحه سرورها **مصرف ترافیک / انقضا** را نشان می‌دهد و
+  هر به‌روزرسانی فقط پروفایل‌های همان اشتراک را جایگزین می‌کند. فرمت‌های Clash YAML و
+  JSON سینگ‌باکس هم پارس می‌شوند.
 - **کپی و چسباندن:** یک یا چند پروفایل را در فهرست انتخاب کنید (با Ctrl/Shift+کلیک)،
   **Ctrl+C** برای کپی به شکل لینک اشتراک و **Ctrl+V** برای ورود از کلیپ‌بورد.
   موارد تکراری خودکار رد می‌شوند. راست‌کلیک هم کپی/چسباندن دارد.
@@ -140,6 +160,8 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
    - **فقط سایفون** — بدون نیاز به سرور.
    - **سایفون بعد از وی‌ری** — ابتدا سرور شما، سپس سایفون.
    - **سایفون قبل از وی‌ری** — ابتدا سایفون، سپس سرور شما.
+   - **وی‌ری روی وارپ** — سرور شما، اما اتصال خود سرور ابتدا از یک هاپ
+     **وارپ (Cloudflare WARP)** عبور می‌کند (ابتدا یک پروفایل WireGuard — ترجیحاً Warp — انتخاب کنید).
 2. گزینه **کل سیستم (تونل)** فعال بماند تا همه برنامه‌ها و ترمینال‌ها هم از VPN عبور کنند.
    گزینه‌های **پروکسی سیستم** و **مسدود کردن کوییک** هم در دسترس هستند.
 3. **اتصال** را بزنید؛ وضعیت سبز می‌شود.
@@ -149,6 +171,12 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
 6. پشیمان شدید در حالی که هنوز در حال اتصال است؟ دکمه **قطع در حین تلاش برای اتصال هم فعال
    می‌ماند** — آن را بزنید (پیشخوان یا نوار کوچک) تا تلاش فوراً لغو شود: موتورهای روشن‌شده
    خاموش می‌شوند و برنامه بدون پیام خطا به حالت DISCONNECTED برمی‌گردد.
+
+### دی‌ان‌اس و بررسی نشت
+- **تنظیمات → DNS** — بین خودکار / 1.1.1.1 / 8.8.8.8 / 9.9.9.9 انتخاب کنید؛ هر کدام به
+  دو شکل UDP یا وسیع‌تر DoH. هنگام اتصال هر دو موتور از آن استفاده می‌کنند.
+- در **پیشخوان** دکمه **Check IP** را بزنید تا آی‌پی مستقیم با آی‌پی مسیر پروکسی مقایسه
+  شود — اگر آدرس واقعی شما هنگام اتصال دیده شود، نشت اعلام می‌گردد.
 
 ### کشور خروجی سایفون
 - در بخش **سایفون → کشور خروجی** کشور مورد نظر را از فهرست (همراه ایموجی پرچم هر کشور) انتخاب کنید.
