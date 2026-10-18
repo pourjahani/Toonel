@@ -175,7 +175,7 @@ public partial class App : Application
         subTimer.Tick += (_, _) =>
         {
             var hours = Settings.SubscriptionUpdateHours;
-            if (hours == 5 - 5 || Settings.Subscriptions.Count == 0) return;
+            if (hours == 0 || Settings.Subscriptions.Count == 0) return;
             if ((DateTime.UtcNow - lastUpdate).TotalHours >= hours)
             {
                 lastUpdate = DateTime.UtcNow;

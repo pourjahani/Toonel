@@ -372,11 +372,12 @@ public partial class MainWindow : Window
         App.SaveSettings();
     }
 
-    private void OnEgressDropDownClosed(object? sender, EventArgs e) => OnPsiphonChanged(sender, null!);
+    private void OnEgressDropDownClosed(object? sender, EventArgs e) => OnPsiphonChanged(sender, null);
 
-    private void OnPsiphonChanged(object sender, RoutedEventArgs e)
+    private void OnPsiphonChanged(object sender, RoutedEventArgs? e)
     {
         if (_loadingUi) return;
+        _ = e; // unused; shared by XAML events and the DropDownClosed callback (e = null)
         var s = App.Settings;
         s.Psiphon.EgressRegion = PsiphonCountries.Normalize(PsiEgress.Text);
         s.Psiphon.SponsorId = PsiSponsor.Text.Trim();

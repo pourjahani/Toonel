@@ -21,8 +21,12 @@ public sealed class CoreDownloader
         $"https://github.com/XTLS/Xray-core/releases/download/{XrayVersion}/Xray-windows-64.zip";
     public static string SingBoxUrl =>
         $"https://github.com/SagerNet/sing-box/releases/download/{SingBoxVersion}/sing-box-1.14.2-windows-amd64.zip";
-    public const string PsiphonUrl =
-        "https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/master/windows/psiphon-tunnel-core-i686.exe";
+    // Psiphon tunnel-core: pinned to an immutable commit of the official binaries repo.
+    // The binary runs elevated, so the URL must never come from a mutable branch like
+    // "master" — bump the SHA (and verify the URL still responds) when adopting a new build.
+    public const string PsiphonCommit = "d95d7f964c043a5a0ebd25cca801bc2753e14f74";
+    public static string PsiphonUrl =>
+        $"https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-binaries/{PsiphonCommit}/windows/psiphon-tunnel-core-i686.exe";
 
     private readonly string _coresDir;
     private readonly HttpClient _http;

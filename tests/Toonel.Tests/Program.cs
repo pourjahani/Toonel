@@ -56,6 +56,10 @@ public static class Program
         Run("CipherSuites_Wired_Xray_And_SingBox", CipherSuites_Wired_Xray_And_SingBox);
         Run("FinalMask_Snippet_Injected_IntoStream", FinalMask_Snippet_Injected_IntoStream);
         Run("Xray_PinnedVersion_SupportsFinalMask", Xray_PinnedVersion_SupportsFinalMask);
+        Run("Security_CoresDirBoundary_KillsOnlyOurs", Security_CoresDirBoundary_KillsOnlyOurs);
+        Run("Security_PsiphonUrl_ImmutableCommit", Security_PsiphonUrl_ImmutableCommit);
+        Run("Security_LinkParser_HugeBase64_NoOverflow", Security_LinkParser_HugeBase64_NoOverflow);
+        Run("SettingsStore_AtomicSave_RoundTrip", SettingsStore_AtomicSave_RoundTrip);
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed");
         return _fail == 0 ? 0 : 1;
@@ -733,5 +737,74 @@ public static class Program
         // streamSettings.finalmask needs Xray-core v26.2.6+ (TCP fragment mask: v26.3.27).
         Check(CoreDownloader.XrayVersion == "v26.3.27", "xray pin: v26.3.27 (finalmask-capable)");
         Check(CoreDownloader.XrayUrl.EndsWith($"/{CoreDownloader.XrayVersion}/Xray-windows-64.zip"), "xray pin: download URL matches");
+    }
+
+    // ---------- security fixes ----------
+
+    private static void Security_CoresDirBoundary_KillsOnlyOurs()
+    {
+        // The kill-by-path check must match files inside \cores\ exactly — a sibling
+        // folder such as "coresEvil" shares the "cores" prefix but must never match.
+        var core = Path.Combine("J:", "app", "cores");
+        Check(EngineManager.IsOurBinary(Path.Combine(core, "xray.exe"), core), "kill guard: file inside cores matches");
+        Check(EngineManager.IsOurBinary(Path.Combine(core, "xray.exe").Replace('\\', '/'), core), "kill guard: forward-slash path matches");
+        Check(!EngineManager.IsOurBinary(Path.Combine("J:", "app", "coresEvil", "xray.exe"), core), "kill guard: sibling dir coresEvil rejected");
+        Check(!EngineManager.IsOurBinary(Path.Combine(core, "sub", "xray.exe"), core), "kill guard: cores subdirectory rejected");
+        Check(!EngineManager.IsOurBinary(null, core), "kill guard: null path rejected");
+        Check(EngineManager.IsOurBinary(Path.Combine(core, "xray"), core), "kill guard: extensionless file inside cores matches");
+        Check(!EngineManager.IsOurBinary(core + ".zray.exe", core), "kill guard: paths outside the cores folder rejected");
+    }
+
+    private static void Security_PsiphonUrl_ImmutableCommit()
+    {
+        // The psiphon binary runs elevated; the URL must come from an immutable commit,
+        // never the mutable master branch of the binaries repo.
+        Check(!CoreDownloader.PsiphonUrl.Contains("/master/"), "psiphon pin: not on master branch");
+        Check(CoreDownloader.PsiphonUrl.Contains($"/{CoreDownloader.PsiphonCommit}/"), "psiphon pin: commit SHA in URL");
+        Check(CoreDownloader.PsiphonCommit.Length == 40, "psiphon pin: full (not abbreviated) SHA-1");
+    }
+
+    private static void Security_LinkParser_HugeBase64_NoOverflow()
+    {
+        // A pasted link with a megabyte-long pubkey value must be handled without a
+        // stack overflow (previously stackalloc'd value.Length bytes off the link).
+        var garbage = new string('!', 1_000_000);   // invalid base64 -> clean error
+        var ok = PsiphonLinkParser.TryParse($"psiphon://?pubkey={garbage}", out _, out var err);
+        Check(!ok && err is not null && err.Contains("base64"), "link parser: 1 MB garbage pubkey rejected with error");
+
+        // A megabyte of valid base64 decodes on the heap and simply parses through.
+        var hugeValid = Convert.ToBase64String(new byte[750_000]);   // ~1 MB text
+        Check(PsiphonLinkParser.TryParse($"psiphon://?pubkey={hugeValid}", out _, out _)!,
+              "link parser: 1 MB valid base64 does not crash");
+
+        // A legit short key still parses.
+        var shortKey = Convert.ToBase64String(new byte[32]);
+        Check(PsiphonLinkParser.TryParse($"psiphon://?pubkey={shortKey}", out _, out _)!, "link parser: real 32-byte key accepted");
+    }
+
+    private static void SettingsStore_AtomicSave_RoundTrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "toonel-settings-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var s = new AppSettings { Language = "fa", SubscriptionUpdateHours = 24 };
+            s.Profiles.Add(new Profile { Name = "n1", Protocol = ProfileProtocol.Vless, Address = "a.example.com", Port = 443 });
+            SettingsStore.Save(s, path);
+
+            Check(!File.Exists(path + ".tmp"), "settings atomic: temp file removed after save");
+            var back = SettingsStore.Load(path);
+            Check(back.Language == "fa" && back.SubscriptionUpdateHours == 24, "settings atomic: round trip");
+            Check(back.Profiles.Count == 1 && back.Profiles[0].Address == "a.example.com", "settings atomic: profile survives");
+
+            // A stale .tmp left by a crash must not break the next save.
+            File.WriteAllText(path + ".tmp", "garbage");
+            SettingsStore.Save(s, path);
+            Check(!File.Exists(path + ".tmp"), "settings atomic: rerun overwrites stale tmp");
+        }
+        finally
+        {
+            try { File.Delete(path); } catch { }
+            try { File.Delete(path + ".tmp"); } catch { }
+        }
     }
 }

@@ -311,7 +311,7 @@ public sealed class EngineManager
                 try
                 {
                     var path = proc.MainModule?.FileName;
-                    if (path is not null && path.StartsWith(coresDir, StringComparison.OrdinalIgnoreCase))
+                    if (IsOurBinary(path, coresDir))
                         proc.Kill(entireProcessTree: true);
                 }
                 catch { /* not ours or access denied */ }
@@ -327,5 +327,21 @@ public sealed class EngineManager
     {
         State = s;
         StateChanged?.Invoke(s);
+    }
+
+    /// <summary>True only when <paramref name="path"/> is a file directly inside
+    /// <paramref name="coresDir"/> — a plain prefix StartsWith would also match sibling
+    /// folders such as "coresEvil", so the wrong process could be force-killed.</summary>
+    public static bool IsOurBinary(string? path, string coresDir)
+    {
+        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(coresDir)) return false;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var norm = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        var dir = coresDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!norm.StartsWith(dir, comparison)) return false;
+        // Must be directly followed by a separator (excludes sibling dirs like "coresEvil").
+        if (norm.Length <= dir.Length || norm[dir.Length] != Path.DirectorySeparatorChar) return false;
+        // And must not be in a subdirectory of cores.
+        return norm.AsSpan(dir.Length + 1).IndexOf(Path.DirectorySeparatorChar) < 0;
     }
 }

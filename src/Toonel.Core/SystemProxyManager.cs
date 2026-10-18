@@ -36,7 +36,26 @@ public static class SystemProxyManager
             using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
             if (key?.GetValue("ProxyEnable") is not 1) return;
             var server = key.GetValue("ProxyServer") as string;
-            if (string.IsNullOrEmpty(server) || !server.Contains($":{httpPort}", StringComparison.OrdinalIgnoreCase)) return;
+            // Exact host:port comparison — a substring match on ":{port}" would also
+            // hit e.g. :10808 when our port is 1080 and stomp a foreign proxy setting.
+            if (server is null) return;
+            var host = server.AsSpan();
+            for (int i = 0; i < host.Length; i++)
+                if (host[i] == ';')
+                {
+                    if (Matches(host[(i + 1)..].TrimEnd())) { Disable(); return; }
+                }
+            if (Matches(host)) Disable();
+
+            bool Matches(ReadOnlySpan<char> candidate)
+            {
+                // ProxyServer may be "host:port" or "http=host:port;https=host:port".
+                var eq = candidate.IndexOf('=');
+                if (eq >= 0) candidate = candidate[(eq + 1)..];
+                var colon = candidate.LastIndexOf(':');
+                if (colon < 0 || !int.TryParse(candidate[(colon + 1)..], out var port)) return false;
+                return port == httpPort;
+            }
         }
         catch
         {

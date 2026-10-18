@@ -42,13 +42,6 @@ public static class ProfileUrlParser
             return list;
         }
 
-        // Plain WireGuard .conf text ([Interface]/[Peer] sections) is one profile.
-        if (text.Contains("[Interface]") && text.Contains("[Peer]") && !text.Contains("://"))
-        {
-            if (TryParseWireGuardConf(text, out var wg)) list.Add(wg);
-            return list;
-        }
-
         // Whole text might be one base64 blob (subscription style).
         var decoded = TryBase64Decode(text.Trim());
         if (decoded is not null && decoded.Contains("://"))

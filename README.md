@@ -121,10 +121,27 @@ Per-app routing requires TUN mode (admin/UAC), same as Proxifier itself.
 dotnet run --project tests/Toonel.Tests
 ```
 
-170 checks covering config generation for every mode, anti-loop invariants, split
+187 checks covering config generation for every mode, anti-loop invariants, split
 tunnel rule ordering, Psiphon config merging, all share-link parsers (both directions),
 Clash YAML / sing-box JSON subscription parsing, the leak tester, manual-config
-overrides with safe fallback, and the Fragment / cipher-suites / FinalMask injections.
+overrides with safe fallback, the Fragment / cipher-suites / FinalMask injections, and
+the security guardrails (cores-folder kill boundary, immutable Psiphon pin, parser
+overflow guard, atomic settings save).
+
+## Security posture
+
+- Engine binaries run with full user privileges (the TUN sidecar elevated). The Psiphon
+  tunnel-core URL is pinned to an immutable commit of the official binaries repo, and
+  Xray/sing-box come from files-pinned release URLs over HTTPS, never mutable branches;
+  `cores\` contents are only overwritten by explicit new pins.
+- The whole-process kill paths (stale-engine cleanup, "Flush network") kill only
+  executables that live directly inside the app's `cores` folder — never sibling or
+  similarly-named folders.
+- `settings.json` (profiles, credentials) is written atomically (temp file + rename) so
+  a crash can never truncate it, and is never transmitted anywhere; QR codes and share
+  links are generated locally by QRCoder.
+- Manual engine configs are JSON-validated before they can be applied, and an invalid
+  saved config always falls back to the generated one.
 
 ## Honest limitations
 

@@ -174,8 +174,21 @@ public static class PsiphonLinkParser
 
     private static bool IsBase64(string value)
     {
-        Span<byte> buffer = stackalloc byte[value.Length];
-        return Convert.TryFromBase64String(value, buffer, out var written) && written >= 32;
+        // Stack-allocate only for small values; a long pasted key must not stack-overflow
+        // the parser (share links on one line can be arbitrarily long).
+        if (value.Length <= 256)
+        {
+            Span<byte> buffer = stackalloc byte[value.Length];
+            return Convert.TryFromBase64String(value, buffer, out var written) && written >= 32;
+        }
+        try
+        {
+            return Convert.FromBase64String(value) is { Length: >= 32 };
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static string Unescape(string value)

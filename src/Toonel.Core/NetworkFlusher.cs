@@ -76,7 +76,7 @@ public static class NetworkFlusher
                 try
                 {
                     var path = proc.MainModule?.FileName;
-                    if (path is not null && path.StartsWith(coresDir, StringComparison.OrdinalIgnoreCase))
+                    if (EngineManager.IsOurBinary(path, coresDir))
                     {
                         proc.Kill(entireProcessTree: true);
                         killed++;

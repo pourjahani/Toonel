@@ -39,6 +39,10 @@ public static class SettingsStore
     public static void Save(AppSettings settings, string? path = null)
     {
         path ??= DefaultPath;
-        File.WriteAllText(path, JsonSerializer.Serialize(settings, JsonOpts));
+        // Atomic write: settings.json holds the profiles' credentials, so a crash or
+        // power loss mid-write must never truncate it (temp file + atomic rename).
+        var tmp = path + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(settings, JsonOpts));
+        File.Move(tmp, path, overwrite: true);
     }
 }
