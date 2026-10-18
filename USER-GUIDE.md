@@ -60,6 +60,33 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
 - On the **Dashboard**, press **Check IP** to compare your direct IP with the proxied
   one — it flags a leak if your real address still shows while you are connected.
 
+### Edit the engine configs yourself (Configs page)
+- Open **Configs**. Pick an engine tab — **Xray**, **sing-box** or **Psiphon** — and press
+  **Generate**: the editor fills with the exact config Toonel would run right now
+  (your profile, mode, ports, DNS and DPI settings included).
+- Edit *any part* of the JSON, press **Validate** to check it, then **Save**.
+- Tick **Use manual config** to make the engine run your version on the next connect.
+  Breaking something is safe: invalid JSON is refused at save time, and even if a saved
+  file is bad, Toonel falls back to the generated config at launch.
+- The **Psiphon** tab is merged into `client.config` last, so it overrides everything;
+  it also accepts `psiphon://` links. Chain-managed values are re-set by chain modes.
+
+### DPI evasion: Fragment, Cipher suites, FinalMask
+- On the **Configs** page, these quick settings are baked into every generated Xray
+  config (press **Generate** again after changing them):
+  - **Fragment** — slices the TLS handshake / TCP stream: `packets` (`tlshello` or e.g.
+    `1-3`), `length` (`100-200`) and `interval` ms (`10-20`). Works on every engine
+    version, and in the Psiphon-before / V2Ray-over-WARP chain modes it is threaded
+    into the chain automatically.
+  - **Cipher suites** — extra TLS 1.0–1.2 suites (colon-separated). A uTLS fingerprint
+    overrides them, and newer TLS 1.3 suites are not configurable anywhere in Xray.
+  - **FinalMask** — Xray's advanced final-stage traffic obfuscation: paste a full
+    `FinalMaskObject` JSON, e.g.
+    `{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","lengths":["3-5"],"delays":["10-20"],"maxSplit":"3-6"}}]}`.
+    FinalMask needs **Xray-core v26.2.6+**: If your `cores\xray.exe` is older (from a
+    previous version of Toonel), open **Settings → Binaries** and press
+    **Update Xray** (disconnect first).
+
 ### Psiphon egress country
 - Open **Psiphon → Egress country** and pick the country your traffic should exit from —
   the dropdown lists the countries Psiphon usually serves, each with its flag emoji.
@@ -177,6 +204,33 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
   دو شکل UDP یا وسیع‌تر DoH. هنگام اتصال هر دو موتور از آن استفاده می‌کنند.
 - در **پیشخوان** دکمه **Check IP** را بزنید تا آی‌پی مستقیم با آی‌پی مسیر پروکسی مقایسه
   شود — اگر آدرس واقعی شما هنگام اتصال دیده شود، نشت اعلام می‌گردد.
+
+### ویرایش دستی پیکربندی‌ها (صفحه پیکربندی‌ها)
+- بخش **پیکربندی‌ها** را باز کنید و سربرگ موتور را انتخاب کنید — **Xray**، **sing-box** یا
+  **Psiphon** — و دکمه **ساخت** را بزنید: پیکربندی‌ای که تونل همین حالا اجرا می‌کند
+  (پروفایل، حالت، پورت‌ها، DNS و تنظیمات ضد فیلترینگ) داخل ویرایشگر می‌ریزد.
+- **هر بخش** از JSON را ویرایش کنید، با **بررسی** اعتبارسنجی کنید و **ذخیره** را بزنید.
+- چک‌باکس **استفاده از پیکربندی دستی** یعنی موتور در اتصال بعدی همان نسخه شما را اجرا کند.
+  خراب کردنش امن است: JSON نامعتبر در زمان ذخیره رد می‌شود و اگر نسخه ذخیره‌شده خراب باشد،
+  تونل همان پیکربندی ساخته‌شده را اجرا می‌کند.
+- سربرگ **Psiphon** آخر از همه داخل client.config ادغام می‌شود پس همه‌چیز را عوض می‌کند؛
+  لینک‌های psiphon:// هم قبول است. مقادیر زنجیره‌ای توسط حالت‌های زنجیره دوباره تنظیم می‌شوند.
+
+### ضد فیلترینگ: Fragment، مجموعه رمزها، FinalMask
+- در صفحه **پیکربندی‌ها** این تنظیمات سریع داخل همه پیکربندی‌های ساخته‌شده ایکس‌ری اعمال
+  می‌شوند (بعد از تغییر، دوباره **ساخت** را بزنید):
+  - **تکه‌تکه کردن (Fragment)** — لنگهٔ دست خوش TLS و جریان TCP را تکه می‌کند: `packets`
+    (`tlshello` یا مثل `1-3`)، `length` (`100-200`) و `interval` میلی‌ثانیه (`10-20`).
+    روی همه نسخه‌های موتور کار می‌کند و در حالت سایفون قبل از وی‌ری / وی‌ری روی وارپ در
+    زنجیره جا می‌گیرد.
+  - **مجموعه رمزهای TLS** — مجموعه‌های TLS از 1.0 تا 1.2 اضافی (با دو نقطه جدا شود).
+    اثر انگشت uTLS آنها را بازنویسی می‌کند و مجموعه‌های TLS 1.3 در ایکس‌ری قابل
+    تنظیم نیستند.
+  - **FinalMask** — لایه نهایی مخفی‌سازی ترافیک Xray: یک JSON کامل `FinalMaskObject` لو بده،
+    مثل `{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","lengths":["3-5"],"delays":["10-20"],"maxSplit":"3-6"}}]}`.
+    FinalMask **ایکس‌ری نسخه 26.2.6 به بالا** می‌خواهد: اگر `cores\xray.exe` شما از نسخه
+    قبلی قدیمی است، در **تنظیمات → فایل‌های موتور** دکمه **به‌روزرسانی ایکس‌ری** را بزنید
+    (ابتدا قطع کنید).
 
 ### کشور خروجی سایفون
 - در بخش **سایفون → کشور خروجی** کشور مورد نظر را از فهرست (همراه ایموجی پرچم هر کشور) انتخاب کنید.

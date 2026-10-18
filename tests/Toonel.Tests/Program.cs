@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Text.Json.Nodes;
 using Toonel.Core;
 using Toonel.Core.Models;
@@ -47,6 +48,14 @@ public static class Program
         Run("SingBox_NativeHy2_Dns", SingBox_NativeHy2_Dns);
         Run("SubClient_ParsesClashAndUserinfo", SubClient_ParsesClashAndUserinfo);
         ShareLink_VmessAndSs();
+        Run("Manual_Override_ReplacesGenerated", Manual_Override_ReplacesGenerated);
+        Run("Manual_InvalidJson_FallsBack", Manual_InvalidJson_FallsBack);
+        Run("Manual_WriteConfigs_UsesOverride", Manual_WriteConfigs_UsesOverride);
+        Run("Fragment_Injected_As_FreedomDialer", Fragment_Injected_As_FreedomDialer);
+        Run("Fragment_Chains_InPsiphonBeforeMode", Fragment_Chains_InPsiphonBeforeMode);
+        Run("CipherSuites_Wired_Xray_And_SingBox", CipherSuites_Wired_Xray_And_SingBox);
+        Run("FinalMask_Snippet_Injected_IntoStream", FinalMask_Snippet_Injected_IntoStream);
+        Run("Xray_PinnedVersion_SupportsFinalMask", Xray_PinnedVersion_SupportsFinalMask);
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed");
         return _fail == 0 ? 0 : 1;
@@ -565,5 +574,164 @@ public static class Program
 
         Check(SubscriptionClient.FormatTraffic(-1, -1, -1, 0).Length == 0, "sub: no traffic line when no data");
         Check(SubscriptionClient.ValidateUrl("notaurl") != null && SubscriptionClient.ValidateUrl("https://x/y") == null, "sub: url validation");
+    }
+
+    // ---------- manual configs + DPI/TLS ----------
+
+    private static void Manual_Override_ReplacesGenerated()
+    {
+        var s = Settings();
+        s.SelectedProfileId = s.Profiles[0].Id;
+        var manual = "{\"log\":{\"loglevel\":\"trace\"},\"marker\":\"user-xray\"}";
+        s.ManualConfig = new ManualConfigSettings { Xray = manual, UseXray = true };
+        var (text, usedManual) = ConfigManual.ResolveXray(s, ConnectionMode.V2RayOnly);
+        Check(usedManual && text == manual, "manual xray: override replaces generated");
+
+        s.ManualConfig.UseXray = false;
+        var (gen, stillManual) = ConfigManual.ResolveXray(s, ConnectionMode.V2RayOnly);
+        Check(!stillManual && gen.Contains("proxy-out"), "manual xray: disabled -> generated");
+
+        s.ManualConfig = new ManualConfigSettings();
+        s.ManualConfig.SingBox = "{}";
+        s.ManualConfig.UseSingBox = true;
+        var (sb, sbManual) = ConfigManual.ResolveSingBox(s, ConnectionMode.V2RayOnly, "log.txt", withTun: false);
+        Check(sbManual && sb == "{}", "manual singbox: override replaces generated");
+    }
+
+    private static void Manual_InvalidJson_FallsBack()
+    {
+        var s = Settings();
+        s.SelectedProfileId = s.Profiles[0].Id;
+        s.ManualConfig = new ManualConfigSettings { Xray = "{ not json", UseXray = true };
+        var (text, usedManual) = ConfigManual.ResolveXray(s, ConnectionMode.V2RayOnly, note: _ => { });
+        Check(!usedManual && text.Contains("proxy-out"), "manual xray: broken JSON falls back to generated");
+
+        Check(ConfigManual.ValidateJson("{}") is null && ConfigManual.ValidateJson("[]") is null, "validate: object/array ok");
+        Check(ConfigManual.ValidateJson("") != null && ConfigManual.ValidateJson("{{") != null, "validate: bad/empty rejected");
+        Check(ConfigManual.ValidateJson("\"just a string\"") != null, "validate: scalar root rejected");
+    }
+
+    private static void Manual_WriteConfigs_UsesOverride()
+    {
+        var s = Settings();
+        s.SelectedProfileId = s.Profiles[0].Id;
+        s.ManualConfig = new ManualConfigSettings
+        {
+            Xray = "{\"marker\":\"user-xray\"}",
+            SingBox = "{\"marker\":\"user-singbox\"}",
+            UseXray = true,
+            UseSingBox = true,
+        };
+        var runtime = Path.Combine(Path.GetTempPath(), "toonel-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(runtime);
+        try
+        {
+            var engines = new EngineManager(new LogBuffer(), runtime, runtime);
+            engines.WriteConfigs(s, ConnectionMode.V2RayOnly);
+            Check(File.ReadAllText(Path.Combine(runtime, "config.xray.json")).Contains("user-xray"), "write: xray override on disk");
+            Check(File.ReadAllText(Path.Combine(runtime, "config.singbox.json")).Contains("user-singbox"), "write: singbox override on disk");
+            Check(File.ReadAllText(Path.Combine(runtime, "client.config")).Length > 0, "write: psiphon config still written");
+        }
+        finally
+        {
+            Directory.Delete(runtime, recursive: true);
+        }
+    }
+
+    private static void Fragment_Injected_As_FreedomDialer()
+    {
+        var s = Settings();
+        s.SelectedProfileId = s.Profiles[0].Id;
+        s.Dpi = new DpiSettings { UseFragment = true, FragmentPackets = "tlshello", FragmentLength = "100-200", FragmentInterval = "10-20" };
+        var cfg = Xray(s, ConnectionMode.V2RayOnly);
+        var outbounds = cfg["outbounds"]!.AsArray();
+        var frag = outbounds.FirstOrDefault(o => o!["tag"]!.GetValue<string>() == "fragment-out");
+        Check(frag is not null, "fragment: freedom outbound present");
+        Check(frag!["protocol"]!.GetValue<string>() == "freedom", "fragment: protocol freedom");
+        var fragment = frag["settings"]!["fragment"]!.AsObject();
+        Check(fragment["packets"]!.GetValue<string>() == "tlshello", "fragment: packets field");
+        Check(fragment["length"]!.GetValue<string>() == "100-200", "fragment: length field");
+        Check(fragment["interval"]!.GetValue<string>() == "10-20", "fragment: interval field");
+        var proxy = outbounds.First(o => o!["tag"]!.GetValue<string>() == "proxy-out");
+        Check(proxy["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>() == "fragment-out", "fragment: proxy dials fragment outbound");
+
+        // Fragment off -> no fragment outbound, no dialer on the proxy.
+        s.Dpi = new DpiSettings();
+        var off = Xray(s, ConnectionMode.V2RayOnly);
+        var outsOff = off["outbounds"]!.AsArray();
+        Check(!outsOff.Any(o => o!["tag"]!.GetValue<string>() == "fragment-out"), "fragment: absent when disabled");
+        var proxyOff = outsOff.First(o => o!["tag"]!.GetValue<string>() == "proxy-out");
+        Check(proxyOff["streamSettings"]!["sockopt"] is null, "fragment: no dialer on proxy when disabled");
+    }
+
+    private static void Fragment_Chains_InPsiphonBeforeMode()
+    {
+        var s = Settings();
+        s.Dpi = new DpiSettings { UseFragment = true };
+        var cfg = Xray(s, ConnectionMode.PsiphonBefore);
+        var outbounds = cfg["outbounds"]!.AsArray();
+        var frag = outbounds.First(o => o!["tag"]!.GetValue<string>() == "fragment-out");
+        Check(frag!["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>() == "psiphon-out", "fragment chain: fragment dials psiphon");
+        var proxy = outbounds.First(o => o!["tag"]!.GetValue<string>() == "proxy-out");
+        Check(proxy["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>() == "fragment-out", "fragment chain: proxy dials fragment");
+
+        s.Dpi = new DpiSettings { UseFragment = true };
+        var warp = Xray(s, ConnectionMode.WarpBefore);
+        var wOuts = warp["outbounds"]!.AsArray();
+        var wFrag = wOuts.First(o => o!["tag"]!.GetValue<string>() == "fragment-out");
+        Check(wFrag!["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>() == "warp-out", "fragment chain: fragment dials warp");
+    }
+
+    private static void CipherSuites_Wired_Xray_And_SingBox()
+    {
+        var s = Settings();
+        s.SelectedProfileId = s.Profiles[0].Id;
+        const string suites = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
+        s.Dpi = new DpiSettings { CipherSuites = suites };
+        var xcfg = Xray(s, ConnectionMode.V2RayOnly);
+        var proxy = xcfg["outbounds"]!.AsArray().First(o => o!["tag"]!.GetValue<string>() == "proxy-out");
+        Check(proxy["streamSettings"]!["tlsSettings"]!["cipherSuites"]!.GetValue<string>() == suites, "cipher: xray tlsSettings.cipherSuites");
+
+        var scfg = JsonNode.Parse(SingBoxConfigBuilder.Build(s, ConnectionMode.V2RayOnly, withTun: false))!.AsObject();
+        var native = SingBoxGeneratedNative(scfg);
+        Check(native is null, "cipher: v2ray-only non-hy2 profile -> no native outbound to test");
+
+        // sing-box native (hysteria2) path:
+        s.Profiles.Clear();
+        s.Profiles.Add(new Profile { Name = "H", Protocol = ProfileProtocol.Hysteria2, Address = "h.example.com", Port = 443, Password = "pw" });
+        s.SelectedProfileId = s.Profiles[0].Id;
+        var s2 = JsonNode.Parse(SingBoxConfigBuilder.Build(s, ConnectionMode.V2RayOnly, withTun: false))!.AsObject();
+        var hy = s2["outbounds"]!.AsArray().First(o => o!["tag"]!.GetValue<string>() == "xray");
+        var list = hy["tls"]!["cipher_suites"]!.AsArray();
+        Check(list.Count == 2 && list[0].GetValue<string>().StartsWith("TLS_"), "cipher: singbox tls.cipher_suites list");
+    }
+
+    private static JsonObject? SingBoxGeneratedNative(JsonObject cfg) =>
+        cfg["outbounds"]!.AsArray().FirstOrDefault(o => o!["type"]!.GetValue<string>() is "hysteria2" or "tuic") as JsonObject;
+
+    private static void FinalMask_Snippet_Injected_IntoStream()
+    {
+        var s = Settings();
+        s.SelectedProfileId = s.Profiles[0].Id;
+        const string fm = "{\"tcp\":[{\"type\":\"fragment\",\"settings\":{\"packets\":\"tlshello\",\"lengths\":[\"3-5\"],\"delays\":[\"10-20\"],\"maxSplit\":\"3-6\"}}]}";
+        s.Dpi = new DpiSettings { FinalMaskJson = fm };
+        var cfg = Xray(s, ConnectionMode.V2RayOnly);
+        var proxy = cfg["outbounds"]!.AsArray().First(o => o!["tag"]!.GetValue<string>() == "proxy-out");
+        var mask = proxy["streamSettings"]!["finalmask"];
+        Check(mask is not null, "finalmask: injected into proxy streamSettings");
+        Check(mask!["tcp"]![0]!["type"]!.GetValue<string>() == "fragment", "finalmask: mask type preserved");
+        Check(mask["tcp"]![0]!["settings"]!["packets"]!.GetValue<string>() == "tlshello", "finalmask: settings preserved");
+
+        s.Dpi = new DpiSettings { FinalMaskJson = "{" };
+        var broken = Xray(s, ConnectionMode.V2RayOnly);
+        var p2 = broken["outbounds"]!.AsArray().First(o => o!["tag"]!.GetValue<string>() == "proxy-out");
+        Check(p2["streamSettings"]!["finalmask"] is null, "finalmask: invalid JSON ignored, generation survives");
+    }
+
+    private static void Xray_PinnedVersion_SupportsFinalMask()
+    {
+        // streamSettings.finalmask needs Xray-core v26.2.6+ (TCP fragment mask: v26.3.27).
+        Check(CoreDownloader.XrayVersion == "v26.3.27", "xray pin: v26.3.27 (finalmask-capable)");
+        Check(CoreDownloader.XrayUrl.EndsWith($"/{CoreDownloader.XrayVersion}/Xray-windows-64.zip"), "xray pin: download URL matches");
     }
 }

@@ -87,9 +87,11 @@ public partial class MainWindow : Window
         PageProfiles.Visibility = page == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
         PageSplit.Visibility = page == "Split" ? Visibility.Visible : Visibility.Collapsed;
         PagePsiphon.Visibility = page == "Psiphon" ? Visibility.Visible : Visibility.Collapsed;
+        PageConfigs.Visibility = page == "Configs" ? Visibility.Visible : Visibility.Collapsed;
         PageLogs.Visibility = page == "Logs" ? Visibility.Visible : Visibility.Collapsed;
         PageSettings.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "Logs") ScrollLogToEnd();
+        if (page == "Configs") OnConfigsShown();
     }
 
     private void NavClick(object sender, RoutedEventArgs e)
@@ -290,6 +292,7 @@ public partial class MainWindow : Window
         WarpAddr.Text = s.Warp.Address;
         WarpRes.Text = s.Warp.Reserved;
         SubHoursBox.SelectedIndex = s.SubscriptionUpdateHours switch { 6 => 1, 12 => 2, 24 => 3, 0 => 4, _ => 2 };
+        LoadDpiToUi();
         RefreshSubscriptions();
         ChkAutoConnect.IsChecked = s.AutoConnectOnStart;
         ChkMinToTray.IsChecked = s.MinimizeToTray;
@@ -301,6 +304,7 @@ public partial class MainWindow : Window
 
         SyncModeCards();
         _loadingUi = false;
+        ReloadCfgEditor();
     }
 
     private void SaveUiToSettings()
@@ -520,6 +524,7 @@ public partial class MainWindow : Window
         NavProfiles.Content = Loc.T("Profiles");
         NavSplit.Content = Loc.T("Split Tunnel");
         NavPsiphon.Content = Loc.T("Psiphon");
+        NavConfigs.Content = Loc.T("Configs");
         NavLogs.Content = Loc.T("Logs");
         NavSettings.Content = Loc.T("Settings");
         SideEnginesLabel.Text = Loc.T("ENGINES");
@@ -627,6 +632,25 @@ public partial class MainWindow : Window
         TerminalLabel.Text = Loc.T("TERMINAL");
         BtnTerminal.Content = Loc.T("Apply proxy to future terminals");
         BtnRuntime.Content = Loc.T("Open runtime folder");
+        BtnDownloadCores.Content = Loc.T("Download missing");
+        BtnUpdateXray.Content = Loc.T("Update Xray");
+        BtnRefreshCores.Content = Loc.T("Refresh");
+
+        CfgLabel.Text = Loc.T("MANUAL CONFIGS");
+        CfgTitle.Text = Loc.T("Edit engine configs");
+        CfgHint.Text = Loc.T("Generate fills the editor with the config Toonel would run right now — edit any part of it. Saved configs are used on the next connect; an invalid save is ignored at launch (the generated config runs instead).");
+        BtnCfgGenerate.Content = Loc.T("Generate");
+        BtnCfgValidate.Content = Loc.T("Validate");
+        BtnCfgSave.Content = Loc.T("Save");
+        ChkCfgUse.Content = Loc.T("Use manual config");
+        CfgDpiLabel.Text = Loc.T("DPI / TLS (baked into every generated Xray config)");
+        CfgDpiHint.Text = Loc.T("Fragment works on every engine version. Cipher suites apply to TLS 1.0–1.2 only (a uTLS fingerprint overrides them). FinalMask needs Xray-core v26.2.6+ — press Update Xray in Settings → Binaries if your cores folder still has the old engine.");
+        ChkDpiFragment.Content = Loc.T("Fragment");
+        DpiFragMini.Text = Loc.T("packets");
+        DpiFragLen.Text = Loc.T("length");
+        DpiFragInt.Text = Loc.T("interval ms");
+        DpiCipherLabel.Text = Loc.T("Cipher suites");
+        DpiMaskLabel.Text = Loc.T("FinalMask (raw FinalMaskObject JSON, advanced)");
 
         Title = "Toonel";
         RefreshTiles();
@@ -672,6 +696,204 @@ public partial class MainWindow : Window
     }
 
     private void OnRefreshCoresClick(object sender, RoutedEventArgs e) => RefreshCoreStatus();
+
+    /// <summary>Force-replaces cores\xray.exe with the pinned release (FinalMask needs v26.2.6+).</summary>
+    private async void OnUpdateXrayClick(object sender, RoutedEventArgs e)
+    {
+        var answer = MessageBox.Show(
+            Loc.F("Replace cores\\xray.exe with the pinned release ({0})? Stop the tunnel first.", CoreDownloader.XrayVersion),
+            "Toonel", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+        BtnUpdateXray.IsEnabled = false;
+        CoreStatusText.Text = "updating…";
+        try
+        {
+            var res = await App.Downloader.UpdateXrayAsync(new Progress<string>(l => CoreStatusText.Text = l));
+            CoreStatusText.Text = res switch
+            {
+                XrayDownloadResult.Updated => Loc.F("xray.exe updated to {0}.", CoreDownloader.XrayVersion),
+                XrayDownloadResult.RunningLocked => Loc.T("xray.exe is running — disconnect first, then update."),
+                _ => Loc.T("Xray update failed."),
+            };
+            App.Log.Add(EngineManager.SourceApp, CoreStatusText.Text);
+        }
+        finally
+        {
+            BtnUpdateXray.IsEnabled = true;
+            RefreshCoreStatus();
+        }
+    }
+
+    // ---------------- manual configs page ----------------
+
+    private string CfgEngineKey =>
+        CfgEngine?.SelectedItem is ComboBoxItem { Tag: string t } ? t : "xray";
+
+    private void OnConfigsShown()
+    {
+        LoadDpiToUi();
+        ReloadCfgEditor();
+    }
+
+    private void OnCfgEngineChanged(object sender, SelectionChangedEventArgs e) => ReloadCfgEditor();
+
+    /// <summary>Loads the stored manual text for the selected engine (empty = generated).</summary>
+    private void ReloadCfgEditor()
+    {
+        if (CfgEngine is null || CfgEditor is null) return;
+        var outer = _loadingUi;
+        _loadingUi = true;
+        try
+        {
+            var s = App.Settings;
+            switch (CfgEngineKey)
+            {
+                case "singbox":
+                    CfgEditor.Text = s.ManualConfig.SingBox;
+                    ChkCfgUse.IsChecked = s.ManualConfig.UseSingBox;
+                    break;
+                case "psiphon":
+                    CfgEditor.Text = s.Psiphon.CustomConfigJson;
+                    ChkCfgUse.IsChecked = s.Psiphon.CustomConfigJson.Trim().Length > 0;
+                    break;
+                default:
+                    CfgEditor.Text = s.ManualConfig.Xray;
+                    ChkCfgUse.IsChecked = s.ManualConfig.UseXray;
+                    break;
+            }
+        }
+        finally { _loadingUi = outer; }
+    }
+
+    private void OnCfgGenerateClick(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        try
+        {
+            CfgEditor.Text = CfgEngineKey switch
+            {
+                "singbox" => App.Engines.GenerateSingBoxConfig(App.Settings, ViewModel.Mode, App.Settings.TunEnabled),
+                "psiphon" => App.Engines.GeneratePsiphonConfig(App.Settings, ViewModel.Mode),
+                _ => App.Engines.GenerateXrayConfig(App.Settings, ViewModel.Mode),
+            };
+            CfgStatus.Text = Loc.T("Generated. Press Save to keep it.");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Toonel");
+        }
+    }
+
+    private void OnCfgValidateClick(object sender, RoutedEventArgs e)
+    {
+        var text = CfgEditor.Text;
+        // The psiphon editor also accepts special psiphon:// link lines.
+        string? err = CfgEngineKey == "psiphon" && text.TrimStart().StartsWith("psiphon://", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : ConfigManual.ValidateJson(text);
+        CfgStatus.Text = err is null ? Loc.T("Valid ✓") : Loc.F("Not valid JSON: {0}", err);
+    }
+
+    private void OnCfgSaveClick(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        var s = App.Settings;
+        var text = CfgEditor.Text;
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            var err = CfgEngineKey == "psiphon" && text.TrimStart().StartsWith("psiphon://", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : ConfigManual.ValidateJson(text);
+            if (err is not null)
+            {
+                CfgStatus.Text = Loc.F("Not valid JSON: {0}", err);
+                MessageBox.Show(Loc.F("Not valid JSON: {0}\n\nNothing was saved.", err), "Toonel",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+
+        string engineName;
+        switch (CfgEngineKey)
+        {
+            case "singbox":
+                s.ManualConfig.SingBox = text.Trim();
+                s.ManualConfig.UseSingBox = ChkCfgUse.IsChecked == true;
+                engineName = "sing-box";
+                break;
+            case "psiphon":
+                s.Psiphon.CustomConfigJson = text.Trim();
+                engineName = "Psiphon";
+                break;
+            default:
+                s.ManualConfig.Xray = text.Trim();
+                s.ManualConfig.UseXray = ChkCfgUse.IsChecked == true;
+                engineName = "Xray";
+                break;
+        }
+        App.SaveSettings();
+        CfgStatus.Text = Loc.T("Saved ✓");
+        App.Log.Add(EngineManager.SourceApp, $"Manual config saved for {engineName}.");
+        ToastWindow.Show(Loc.F("Saved. {0} will use it on the next connect.", engineName));
+    }
+
+    private void OnCfgUseChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        var s = App.Settings;
+        switch (CfgEngineKey)
+        {
+            case "singbox":
+                s.ManualConfig.UseSingBox = ChkCfgUse.IsChecked == true;
+                break;
+            case "psiphon":
+                // Merged into client.config when non-empty; unchecking clears it.
+                if (ChkCfgUse.IsChecked != true)
+                {
+                    s.Psiphon.CustomConfigJson = "";
+                    CfgEditor.Text = "";
+                }
+                break;
+            default:
+                s.ManualConfig.UseXray = ChkCfgUse.IsChecked == true;
+                break;
+        }
+        App.SaveSettings();
+    }
+
+    // ---------------- DPI / TLS quick settings ----------------
+
+    private void LoadDpiToUi()
+    {
+        if (ChkDpiFragment is null) return;
+        var outer = _loadingUi;
+        _loadingUi = true;
+        try
+        {
+            var d = App.Settings.Dpi;
+            ChkDpiFragment.IsChecked = d.UseFragment;
+            DpiFragPackets.Text = d.FragmentPackets;
+            DpiFragLenBox.Text = d.FragmentLength;
+            DpiFragIntBox.Text = d.FragmentInterval;
+            DpiCipher.Text = d.CipherSuites;
+            CfgFinalMask.Text = d.FinalMaskJson;
+        }
+        finally { _loadingUi = outer; }
+    }
+
+    private void OnDpiChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi || ChkDpiFragment is null) return;
+        var d = App.Settings.Dpi;
+        d.UseFragment = ChkDpiFragment.IsChecked == true;
+        d.FragmentPackets = DpiFragPackets.Text;
+        d.FragmentLength = DpiFragLenBox.Text;
+        d.FragmentInterval = DpiFragIntBox.Text;
+        d.CipherSuites = DpiCipher.Text;
+        d.FinalMaskJson = CfgFinalMask.Text;
+        App.SaveSettings();
+    }
 
     // ---------------- profiles page ----------------
 

@@ -56,6 +56,41 @@ public sealed class PsiphonSettings
     public string CustomConfigJson { get; set; } = "";
 }
 
+/// <summary>DPI-evasion / TLS fingerprinting knobs, overlaid onto the generated engine
+/// configs. Fragment works on every Xray version; cipherSuites and FinalMask need a
+/// reasonably recent Xray-core (see ModelVersionChecks).</summary>
+public sealed class DpiSettings
+{
+    /// <summary>TLS handshake / stream fragmentation through a freedom outbound
+    /// (works on all supported Xray-core versions).</summary>
+    public bool UseFragment { get; set; }
+    /// <summary>"tlshello", or a stream-slice range like "1-3".</summary>
+    public string FragmentPackets { get; set; } = "tlshello";
+    /// <summary>Bytes, e.g. "100-200" (Int32Range).</summary>
+    public string FragmentLength { get; set; } = "100-200";
+    /// <summary>Milliseconds, e.g. "10-20" (Int32Range).</summary>
+    public string FragmentInterval { get; set; } = "10-20";
+
+    /// <summary>Colon-separated TLS cipher suite list (TLS 1.0–1.2 only; a uTLS
+    /// fingerprint overrides it on the Xray side).</summary>
+    public string CipherSuites { get; set; } = "";
+
+    /// <summary>Raw FinalMaskObject JSON (e.g. {"tcp":[{"type":"fragment","settings":{...}}]}).
+    /// Needs Xray-core v26.2.6+; empty = off.</summary>
+    public string FinalMaskJson { get; set; } = "";
+}
+
+/// <summary>User-edited engine configs (Configs page). When enabled and the stored text
+/// is valid JSON, it replaces the generated config at startup; invalid edits fall back
+/// to the generated config (see ConfigManual).</summary>
+public sealed class ManualConfigSettings
+{
+    public string Xray { get; set; } = "";
+    public bool UseXray { get; set; }
+    public string SingBox { get; set; } = "";
+    public bool UseSingBox { get; set; }
+}
+
 /// <summary>
 /// Cloudflare WARP hop credentials, produced by wgcf (register + generate) or any WARP
 /// WireGuard account. Peer key/endpoint are the fixed Cloudflare WARP values; only the
@@ -121,6 +156,8 @@ public sealed class AppSettings
     public ObservableCollection<Profile> Profiles { get; set; } = new();
     public List<SubscriptionInfo> Subscriptions { get; set; } = new();
     public WarpSettings Warp { get; set; } = new();
+    public DpiSettings Dpi { get; set; } = new();
+    public ManualConfigSettings ManualConfig { get; set; } = new();
 
     /// <summary>DNS resolver: "auto" (system/local), plain UDP ("1.1.1.1","8.8.8.8","9.9.9.9")
     /// or DoH ("doh:1.1.1.1","doh:8.8.8.8","doh:9.9.9.9").</summary>

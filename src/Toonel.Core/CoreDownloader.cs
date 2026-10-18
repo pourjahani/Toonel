@@ -12,7 +12,9 @@ namespace Toonel.Core;
 public sealed class CoreDownloader
 {
     // Pinned versions (bump deliberately, after verifying upstream releases).
-    public const string XrayVersion = "v25.8.29";
+    // v26.3.27 is required for streamSettings.finalmask (incl. the TCP fragment mask
+    // type); see Xray-core release notes for v26.2.6/v26.3.27.
+    public const string XrayVersion = "v26.3.27";
     public const string SingBoxVersion = "v1.14.2";
 
     public static string XrayUrl =>
@@ -67,6 +69,41 @@ public sealed class CoreDownloader
         progress?.Report("All cores ready.");
     }
 
+    /// <summary>Force-replaces an engine binary with the pinned version (Ignore if already running).
+    /// Used by the "Update Xray to pinned version" button when a user's cores folder holds an
+    /// engine from an older pin that lacks newer features (e.g. FinalMask).</summary>
+    public async Task<XrayDownloadResult> UpdateXrayAsync(IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var target = Path.Combine(_coresDir, ExeNameXray);
+        // A running xray cannot be overwritten on Windows: probe with an exclusive open.
+        try
+        {
+            using (File.Open(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+            }
+        }
+        catch (FileNotFoundException)
+        {
+            // not installed yet — the download below will create it
+        }
+        catch (IOException)
+        {
+            return XrayDownloadResult.RunningLocked;
+        }
+
+        try
+        {
+            progress?.Report($"Downloading Xray-core {XrayVersion} (update)…");
+            await DownloadZipFlatAsync(XrayUrl, keep: new[] { "xray.exe", "geoip.dat", "geosite.dat" }, ct);
+            return XrayDownloadResult.Updated;
+        }
+        catch (Exception ex)
+        {
+            progress?.Report($"Xray update failed: {ex.Message}");
+            return XrayDownloadResult.Failed;
+        }
+    }
+
     public string MissingSummary() =>
         $"cores dir: {_coresDir}\n" +
         $"xray.exe: {(XrayPresent ? "ok" : "missing")}\n" +
@@ -108,4 +145,12 @@ public sealed class CoreDownloader
         dst.Close();
         File.Move(tmp, targetPath, overwrite: true);
     }
+}
+
+public enum XrayDownloadResult
+{
+    Updated,
+    /// <summary>xray.exe is currently executing — overwrite not possible; stop the tunnel first.</summary>
+    RunningLocked,
+    Failed,
 }

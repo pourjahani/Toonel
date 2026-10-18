@@ -86,14 +86,26 @@ public sealed class EngineManager
         var xrayCfg = Path.Combine(_runtimeDir, "config.xray.json");
         var psiphonCfg = Path.Combine(_runtimeDir, "client.config");
         var singboxCfg = Path.Combine(_runtimeDir, "config.singbox.json");
-        File.WriteAllText(xrayCfg, XrayConfigBuilder.Build(s, mode));
+        File.WriteAllText(xrayCfg, ConfigManual.ResolveXray(s, mode, n => _log.Add(SourceApp, n)).Text);
         File.WriteAllText(psiphonCfg, PsiphonConfigBuilder.Build(s, mode));
-File.WriteAllText(singboxCfg, SingBoxConfigBuilder.Build(s, mode, Path.Combine(_runtimeDir, "singbox.log"), s.TunEnabled));
+        File.WriteAllText(singboxCfg, ConfigManual.ResolveSingBox(s, mode, Path.Combine(_runtimeDir, "singbox.log"), s.TunEnabled, n => _log.Add(SourceApp, n)).Text);
         return singboxCfg;
     }
 
     public string GeneratePsiphonConfig(AppSettings s) =>
         PsiphonConfigBuilder.Build(s, ConnectionMode.PsiphonAfter);
+
+    /// <summary>The generated (pre-override) client.config for the current mode — Configs page source text.</summary>
+    public string GeneratePsiphonConfig(AppSettings s, ConnectionMode mode) =>
+        PsiphonConfigBuilder.Build(s, mode);
+
+    /// <summary>The generated Xray config as it would run right now (Configs page → Generate).</summary>
+    public string GenerateXrayConfig(AppSettings s, ConnectionMode mode) =>
+        XrayConfigBuilder.Build(s, mode);
+
+    /// <summary>The generated sing-box config as it would run right now (Configs page → Generate).</summary>
+    public string GenerateSingBoxConfig(AppSettings s, ConnectionMode mode, bool withTun) =>
+        SingBoxConfigBuilder.Build(s, mode, Path.Combine(_runtimeDir, "singbox.log"), withTun);
 
     public async Task StartAsync(AppSettings s, ConnectionMode mode, CancellationToken ct = default)
     {
@@ -132,7 +144,7 @@ File.WriteAllText(singboxCfg, SingBoxConfigBuilder.Build(s, mode, Path.Combine(_
             {
                 // 1. xray (front router) — required in every other mode.
                 var xrayCfg = Path.Combine(_runtimeDir, "config.xray.json");
-                File.WriteAllText(xrayCfg, XrayConfigBuilder.Build(s, mode));
+                File.WriteAllText(xrayCfg, ConfigManual.ResolveXray(s, mode, n => _log.Add(SourceApp, n)).Text);
                 _xray = new ProcessRunner(SourceXray, XrayPath);
                 _xray.OutputLine += line => _log.Add(SourceXray, line);
                 _xray.Start($"run -c \"{xrayCfg}\"");
@@ -205,7 +217,7 @@ File.WriteAllText(singboxCfg, SingBoxConfigBuilder.Build(s, mode, Path.Combine(_
     private void StartSingBox(AppSettings s, bool withTun = true)
     {
         var cfgPath = Path.Combine(_runtimeDir, "config.singbox.json");
-        File.WriteAllText(cfgPath, SingBoxConfigBuilder.Build(s, _mode, Path.Combine(_runtimeDir, "singbox.log"), withTun));
+        File.WriteAllText(cfgPath, ConfigManual.ResolveSingBox(s, _mode, Path.Combine(_runtimeDir, "singbox.log"), withTun, n => _log.Add(SourceApp, n)).Text);
 
         _singBox = new ProcessRunner(SourceSingBox, SingBoxPath);
         _singBox.OutputLine += line => _log.Add(SourceSingBox, line);

@@ -118,7 +118,7 @@ public static class SingBoxConfigBuilder
         if (native)
         {
             // The native outbound wears the "xray" tag so all route rules stay unchanged.
-            outbounds.Insert(0, NativeProxyOutbound(s.SelectedProfile!, OutXray));
+            outbounds.Insert(0, NativeProxyOutbound(s.SelectedProfile!, OutXray, s.Dpi.CipherSuites));
         }
         else
         {
@@ -188,7 +188,7 @@ public static class SingBoxConfigBuilder
     /// Builds the single-protocol proxy outbound for native sing-box hosting
     /// (Hysteria2 / TUIC). Used when Xray cannot run the selected profile.
     /// </summary>
-    public static JsonObject NativeProxyOutbound(Profile p, string tag)
+    public static JsonObject NativeProxyOutbound(Profile p, string tag, string? cipherSuites = null)
     {
         var tls = new JsonObject
         {
@@ -198,6 +198,10 @@ public static class SingBoxConfigBuilder
         };
         var alpn = string.IsNullOrWhiteSpace(p.Alpn) ? null : new JsonArray(p.Alpn.Split(',').Select(a => (JsonNode)a.Trim()).Where(a => a.ToString().Length > 0).ToArray());
         if (alpn is not null && alpn.Count > 0) tls["alpn"] = alpn;
+
+        // TLS 1.0–1.2 suites only (list form, per sing-box shared TLS docs).
+        var suites = (cipherSuites ?? "").Split(':', ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (suites.Length > 0) tls["cipher_suites"] = new JsonArray(suites.Select(x => (JsonNode)x).ToArray());
 
         return new JsonObject
         {

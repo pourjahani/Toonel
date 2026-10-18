@@ -42,6 +42,7 @@ public static class Loc
         ["Profiles"] = "سرورها",
         ["Split Tunnel"] = "تقسیم ترافیک",
         ["Psiphon"] = "سایفون",
+        ["Configs"] = "پیکربندی‌ها",
         ["Logs"] = "گزارش‌ها",
         ["Settings"] = "تنظیمات",
 
@@ -85,6 +86,36 @@ public static class Loc
         ["Download missing"] = "دانلود موتورهای ناقص",
         ["Apply proxy to future terminals"] = "اعمال پروکسی به ترمینال‌های جدید",
         ["Open runtime folder"] = "باز کردن پوشه اجرا",
+
+        // Configs page
+        ["MANUAL CONFIGS"] = "ویرایش دستی پیکربندی",
+        ["Edit engine configs"] = "ویرایش پیکربندی موتورها",
+        ["Generate fills the editor with the config Toonel would run right now — edit any part of it. Saved configs are used on the next connect; an invalid save is ignored at launch (the generated config runs instead)."]
+            = "ساخت خودکار، پیکربندی‌ای را که تونل همین حالا اجرا می‌کند داخل ویرایشگر می‌ریزد — هر بخش از آن را می‌توانید ویرایش کنید. پیکربندی ذخیره‌شده در اتصال بعدی استفاده می‌شود؛ ذخیرهٔ نامعتبر در زمان اجرا نادیده گرفته می‌شود (پیکربندی ساخته‌شده اجرا می‌شود).",
+        ["Generate"] = "ساخت",
+        ["Validate"] = "بررسی",
+        ["Save"] = "ذخیره",
+        ["Use manual config"] = "استفاده از پیکربندی دستی",
+        ["Valid ✓"] = "معتبر ✓",
+        ["Not valid JSON: {0}"] = "JSON نامعتبر: {0}",
+        ["Not valid JSON: {0}\n\nNothing was saved."] = "JSON نامعتبر: {0}\n\nهیچ چیز ذخیره نشد.",
+        ["Saved ✓"] = "ذخیره شد ✓",
+        ["Generated. Press Save to keep it."] = "ساخته شد. برای نگه‌داشتن آن، ذخیره را بزنید.",
+        ["Saved. {0} will use it on the next connect."] = "ذخیره شد. {0} در اتصال بعدی از آن استفاده می‌کند.",
+        ["DPI / TLS (baked into every generated Xray config)"] = "ضد فیلترینگ / TLS (در همه پیکربندی‌های ساخته‌شده ایکس‌ری اعمال می‌شود)",
+        ["Fragment works on every engine version. Cipher suites apply to TLS 1.0–1.2 only (a uTLS fingerprint overrides them). FinalMask needs Xray-core v26.2.6+ — press Update Xray in Settings → Binaries if your cores folder still has the old engine."]
+            = "تکه‌تکه کردن (Fragment) روی همه نسخه‌های موتور کار می‌کند. مجموعه رمزهای TLS فقط برای 1.0 تا 1.2 اعمال می‌شود (اثر انگشت uTLS آن‌ها را بازنویسی می‌کند). FinalMask با ایکس‌ری نسخه 26.2.6 به بالا کار می‌کند — قدرت‌های قدیمی پوشه cores، از تنظیمات → فایل‌های موتور دکمه به‌روزرسانی ایکس‌ری را بزنید.",
+        ["Fragment"] = "تکه‌تکه کردن",
+        ["packets"] = "بسته‌ها",
+        ["length"] = "طول",
+        ["interval ms"] = "فاصله (میلی‌ثانیه)",
+        ["Cipher suites"] = "مجموعه رمزهای TLS",
+        ["FinalMask (raw FinalMaskObject JSON, advanced)"] = "FinalMask (JSON خام FinalMaskObject — پیشرفته)",
+        ["Update Xray"] = "به‌روزرسانی ایکس‌ری",
+        ["Replace cores\\xray.exe with the pinned release ({0})? Stop the tunnel first."] = "جایگزینی cores\\xray.exe با نسخه ثابت ({0})؟ ابتدا اتصال را قطع کنید.",
+        ["xray.exe updated to {0}."] = "xray.exe به نسخه {0} به‌روزرسانی شد.",
+        ["xray.exe is running — disconnect first, then update."] = "xray.exe در حال اجراست — ابتدا قطع کنید، بعد به‌روزرسانی کنید.",
+        ["Xray update failed."] = "به‌روزرسانی ایکس‌ری ناموفق بود.",
 
         // Engine rows
         ["Xray"] = "ایکس‌ری",
@@ -195,8 +226,7 @@ public static class Loc
         ["This profile type cannot be shared as a QR code."] = "این نوع پروفایل به صورت QR قابل اشتراک نیست.",
         ["Paste failed: {0}"] = "چسباندن ناموفق: {0}",
         ["Paste vless:// · vmess:// · trojan:// · ss:// links or a subscription URL via Import from clipboard. Ctrl+C copies selected profiles (one link per line). Ctrl+V pastes and skips duplicates."
-        ] = "پر Gall vless:// · vmess:// · trojan:// · ss:// یا آدرس اشتراک از کلیپ‌بورد از Import from clipboard. Ctrl+C کپی می‌کند، Ctrl+V چسبانده و تکراری‌ها را رد می‌کند.",
-        ["Paste failed: {0}"] = "چسباندن ناموفق: {0}",
+        ] = "پا ست کردن لینک‌های vless:// · vmess:// · trojan:// · ss:// یا آدرس اشتراک از کلیپ‌بورد با ورود از کلیپ‌بورد. Ctrl+C پروفایل‌های انتخابی را کپی می‌کند (یک لینک در هر خط). Ctrl+V می‌چسباند و تکراری‌ها را رد می‌کند.",
     };
 
     // Format helper for parameterized strings.

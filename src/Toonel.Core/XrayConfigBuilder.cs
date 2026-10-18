@@ -30,6 +30,7 @@ public static class XrayConfigBuilder
     public const string InMainHttp = "in-main-http";
     public const string InVlessOnly = "in-vless-only";
     public const string OutWarp = "warp-out";
+    public const string OutFragment = "fragment-out";
 
     public static string Build(AppSettings s, ConnectionMode mode)
     {
@@ -50,20 +51,25 @@ public static class XrayConfigBuilder
         }
         else
         {
-            var proxy = ProxyOutbound(s.SelectedProfile, mode == ConnectionMode.PsiphonBefore ? s.Ports.PsiphonSocksPort : null);
-            if (mode == ConnectionMode.WarpBefore)
+            // What the proxy outbound dials its server through (null = directly).
+            var dialer = mode switch
             {
-                var streamAnchor = proxy["streamSettings"] as JsonObject;
-                var sockopt = streamAnchor is not null && streamAnchor.TryGetPropertyValue("sockopt", out var so) && so is JsonObject so2 ? so2 : null;
-                if (sockopt is null)
-                {
-                    sockopt = new JsonObject();
-                    if (streamAnchor is not null) streamAnchor["sockopt"] = sockopt;
-                    else proxy.Add("streamSettings", new JsonObject { ["sockopt"] = sockopt });
-                }
-                sockopt["dialerProxy"] = OutWarp;
-                outbounds.Add(WarpOutbound(s));
+                ConnectionMode.PsiphonBefore => OutPsiphon,
+                ConnectionMode.WarpBefore => OutWarp,
+                _ => null as string,
+            };
+            // Fragment threading: the server connection is dialed through a freedom
+            // outbound that fragments the TLS handshake / TCP writes; that freedom
+            // outbound in turn dials through the chain dialer (psiphon / warp), so
+            // fragmentation composes with every mode.
+            if (s.Dpi.UseFragment)
+            {
+                outbounds.Add(FragmentOutbound(s, dialer));
+                dialer = OutFragment;
             }
+            var proxy = ProxyOutbound(s.SelectedProfile, dialer, s.Dpi.CipherSuites, s.Dpi.FinalMaskJson);
+            if (mode == ConnectionMode.WarpBefore)
+                outbounds.Add(WarpOutbound(s));
             outbounds.Add(proxy);
             mainOut = OutProxy;
         }
@@ -240,7 +246,31 @@ public static class XrayConfigBuilder
         }
     }
 
-private static JsonObject PsiphonOutbound(AppSettings s) => new()
+    /// <summary>Freedom outbound that fragments the outgoing TLS/TCP connection.
+    /// `dialer` lets it itself dial through the psiphon/warp hop in chain modes.</summary>
+    private static JsonObject FragmentOutbound(AppSettings s, string? dialer)
+    {
+        var fragment = new JsonObject
+        {
+            ["packets"] = string.IsNullOrWhiteSpace(s.Dpi.FragmentPackets) ? "tlshello" : s.Dpi.FragmentPackets.Trim(),
+            ["length"] = string.IsNullOrWhiteSpace(s.Dpi.FragmentLength) ? "100-200" : s.Dpi.FragmentLength.Trim(),
+            ["interval"] = string.IsNullOrWhiteSpace(s.Dpi.FragmentInterval) ? "10-20" : s.Dpi.FragmentInterval.Trim(),
+        };
+        var outbound = new JsonObject
+        {
+            ["tag"] = OutFragment,
+            ["protocol"] = "freedom",
+            ["settings"] = new JsonObject { ["fragment"] = fragment },
+        };
+        if (dialer is string d)
+            outbound["streamSettings"] = new JsonObject
+            {
+                ["sockopt"] = new JsonObject { ["dialerProxy"] = d },
+            };
+        return outbound;
+    }
+
+    private static JsonObject PsiphonOutbound(AppSettings s) => new()
     {
         ["tag"] = OutPsiphon,
         ["protocol"] = "socks",
@@ -254,7 +284,7 @@ private static JsonObject PsiphonOutbound(AppSettings s) => new()
         },
     };
 
-    private static JsonObject ProxyOutbound(Profile? p, int? dialThroughPsiphonSocksPort)
+    private static JsonObject ProxyOutbound(Profile? p, string? dialerOut, string? cipherSuites = null, string? finalMaskJson = null)
     {
         if (p is null)
         {
@@ -363,23 +393,32 @@ private static JsonObject PsiphonOutbound(AppSettings s) => new()
             ["settings"] = settings,
         };
 
-        var stream = BuildStreamSettings(p);
+        var stream = BuildStreamSettings(p, cipherSuites);
 
-        // "Psiphon before": the proxy outbound dials its server through Psiphon's local SOCKS.
-        if (dialThroughPsiphonSocksPort is int portNum)
+        // The proxy outbound dials its server through the given outbound tag
+        // (psiphon / warp / fragment hop); the hop itself has no recursive dialer.
+        if (dialerOut is string dialer)
+            stream["sockopt"] = new JsonObject { ["dialerProxy"] = dialer };
+
+        // FinalMask traffic obfuscation (Xray-core v26.2.6+) injected verbatim.
+        if (!string.IsNullOrWhiteSpace(finalMaskJson))
         {
-            var sockopt = new JsonObject { ["dialerProxy"] = OutPsiphon };
-            // NOTE: dialerProxy dials the outbound's *server* through the given outbound tag;
-            // the psiphon outbound itself must not recursively use a dialer (it doesn't).
-            stream["sockopt"] = sockopt;
-            _ = portNum; // port is implied by the psiphon outbound definition
+            try
+            {
+                if (JsonNode.Parse(finalMaskJson) is JsonObject finalmask)
+                    stream["finalmask"] = finalmask.DeepClone();
+            }
+            catch
+            {
+                // invalid snippets are rejected by the UI/tests; never crash generation
+            }
         }
 
         if (stream.Count > 0) outbound["streamSettings"] = stream;
         return outbound;
     }
 
-    public static JsonObject BuildStreamSettings(Profile p)
+    public static JsonObject BuildStreamSettings(Profile p, string? cipherSuites = null)
     {
         var stream = new JsonObject();
 
@@ -410,12 +449,15 @@ private static JsonObject PsiphonOutbound(AppSettings s) => new()
         if (p.Security == "tls")
         {
             stream["security"] = "tls";
-            stream["tlsSettings"] = new JsonObject
+            var tls = new JsonObject
             {
                 ["serverName"] = string.IsNullOrWhiteSpace(p.Sni) ? p.Address : p.Sni,
                 ["allowInsecure"] = p.AllowInsecure,
                 ["fingerprint"] = string.IsNullOrWhiteSpace(p.Fingerprint) ? "chrome" : p.Fingerprint,
             };
+            // TLS 1.0–1.2 suites only; a uTLS fingerprint overrides this on the Xray side.
+            if (!string.IsNullOrWhiteSpace(cipherSuites)) tls["cipherSuites"] = cipherSuites.Trim();
+            stream["tlsSettings"] = tls;
         }
         else if (p.Security == "reality")
         {

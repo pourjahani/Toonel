@@ -21,6 +21,18 @@ Built with WPF on .NET 8. Inspired by v2rayN, PattNG, MahsaNG and the Psiphon cl
 - **DNS choice + leak test**: pick automatic / 1.1.1.1 / 8.8.8.8 / 9.9.9.9 (UDP or DoH) —
   applied to both the Xray and sing-box configs — and run **Check IP** on the dashboard to
   compare your direct IP vs the proxied one and flag a leak.
+- **Manual config editing**: a **Configs** page where every engine config can be viewed and
+  edited separately. **Generate** fills the editor with the config Toonel would run right
+  now (all current settings included), you edit any part of it, then **Save** + **Use
+  manual config** makes the engine run your version on the next connect. Invalid JSON is
+  rejected at save time and never run — the generated config is the fallback.
+- **DPI evasion / TLS shaping** (Configs page, baked into the generated Xray config):
+  **Fragment** (`fragment-out` freedom outbound with `packets`/`length`/`interval`, composes
+  with the Psiphon-before and WARP chain modes), **Cipher suites** (Xray
+  `tlsSettings.cipherSuites` + sing-box `tls.cipher_suites`, TLS 1.0–1.2 only), and
+  **FinalMask** (raw `FinalMaskObject` JSON injected as `streamSettings.finalmask` — needs
+  Xray-core v26.2.6+, which is now the pinned engine `v26.3.27`; "Update Xray" in
+  Settings → Binaries replaces an older `cores\xray.exe`).
 - **Psiphon (official engine)**: runs the official `psiphon-tunnel-core` standalone client
   and exposes its local SOCKS/HTTP proxies. Settings for egress region, sponsor/propagation
   IDs, remote server list, and full custom `client.config` JSON overrides.
@@ -69,7 +81,7 @@ dotnet run --project src/Toonel.App
 
 On first connect the app offers to download the pinned engine binaries into the `cores/` folder next to the exe (or `src/Toonel.App/bin/...` in dev runs):
 
-- `xray.exe` — [XTLS/Xray-core](https://github.com/XTLS/Xray-core) `v25.8.29`
+- `xray.exe` — [XTLS/Xray-core](https://github.com/XTLS/Xray-core) `v26.3.27`
 - `sing-box.exe` + `wintun.dll` — [SagerNet/sing-box](https://github.com/SagerNet/sing-box) `v1.14.2`
 - `psiphon-core.exe` — official [psiphon-tunnel-core-binaries](https://github.com/Psiphon-Labs/psiphon-tunnel-core-binaries) standalone client
 
@@ -109,9 +121,10 @@ Per-app routing requires TUN mode (admin/UAC), same as Proxifier itself.
 dotnet run --project tests/Toonel.Tests
 ```
 
-140 checks covering config generation for every mode, anti-loop invariants, split
+170 checks covering config generation for every mode, anti-loop invariants, split
 tunnel rule ordering, Psiphon config merging, all share-link parsers (both directions),
-Clash YAML / sing-box JSON subscription parsing, and the leak tester.
+Clash YAML / sing-box JSON subscription parsing, the leak tester, manual-config
+overrides with safe fallback, and the Fragment / cipher-suites / FinalMask injections.
 
 ## Honest limitations
 

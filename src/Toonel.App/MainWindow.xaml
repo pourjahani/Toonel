@@ -36,6 +36,7 @@
         <RadioButton x:Name="NavProfiles" Content="Profiles" Style="{StaticResource NavButton}" GroupName="nav" Tag="Profiles" Margin="0,2,0,0" Click="NavClick"/>
         <RadioButton x:Name="NavSplit" Content="Split Tunnel" Style="{StaticResource NavButton}" GroupName="nav" Tag="Split" Margin="0,2,0,0" Click="NavClick"/>
         <RadioButton x:Name="NavPsiphon" Content="Psiphon" Style="{StaticResource NavButton}" GroupName="nav" Tag="Psiphon" Margin="0,2,0,0" Click="NavClick"/>
+        <RadioButton x:Name="NavConfigs" Content="Configs" Style="{StaticResource NavButton}" GroupName="nav" Tag="Configs" Margin="0,2,0,0" Click="NavClick"/>
         <RadioButton x:Name="NavLogs" Content="Logs" Style="{StaticResource NavButton}" GroupName="nav" Tag="Logs" Margin="0,2,0,0" Click="NavClick"/>
         <RadioButton x:Name="NavSettings" Content="Settings" Style="{StaticResource NavButton}" GroupName="nav" Tag="Settings" Margin="0,2,0,0" Click="NavClick"/>
 
@@ -341,6 +342,65 @@
         </Border>
       </Grid>
 
+      <!-- ============ Configs (manual per-engine editors + DPI/TLS) ============ -->
+      <Grid x:Name="PageConfigs" Visibility="Collapsed">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource Card}" Padding="24,20">
+          <StackPanel>
+            <TextBlock x:Name="CfgLabel" Text="MANUAL CONFIGS" Style="{StaticResource MicroLabel}"/>
+            <TextBlock x:Name="CfgTitle" Text="Edit engine configs" Style="{StaticResource Headline}" FontSize="20" Margin="0,8,0,8"/>
+            <TextBlock x:Name="CfgHint" Style="{StaticResource Dim}" TextWrapping="Wrap"
+                       Text="Generate fills the editor with the config Toonel would run right now — edit any part of it. Saved configs are used on the next connect; an invalid save is ignored at launch (the generated config runs instead)."/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+              <ComboBox x:Name="CfgEngine" Width="150" SelectionChanged="OnCfgEngineChanged">
+                <ComboBoxItem Content="Xray" Tag="xray"/>
+                <ComboBoxItem Content="sing-box" Tag="singbox"/>
+                <ComboBoxItem Content="Psiphon" Tag="psiphon"/>
+              </ComboBox>
+              <Button x:Name="BtnCfgGenerate" Content="Generate" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Click="OnCfgGenerateClick"/>
+              <Button x:Name="BtnCfgValidate" Content="Validate" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="OnCfgValidateClick"/>
+              <Button x:Name="BtnCfgSave" Content="Save" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Click="OnCfgSaveClick"/>
+              <CheckBox x:Name="ChkCfgUse" Content="Use manual config" Margin="16,0,0,0" Checked="OnCfgUseChanged" Unchecked="OnCfgUseChanged"/>
+              <TextBlock x:Name="CfgStatus" Style="{StaticResource Dim}" Margin="16,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <Border Height="1" Background="{DynamicResource Border}" Margin="0,14,0,0"/>
+            <TextBlock x:Name="CfgDpiLabel" Text="DPI / TLS (baked into every generated Xray config)" Style="{StaticResource MicroLabel}" Margin="0,14,0,0"/>
+            <TextBlock x:Name="CfgDpiHint" Style="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,2,0,0"
+                       Text="Fragment works on every engine version. Cipher suites apply to TLS 1.0–1.2 only (a uTLS fingerprint overrides them). FinalMask needs Xray-core v26.2.6+ — press Update Xray in Settings → Binaries if your cores folder still has the old engine."/>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <CheckBox x:Name="ChkDpiFragment" Content="Fragment" VerticalAlignment="Center" Checked="OnDpiChanged" Unchecked="OnDpiChanged"/>
+              <TextBlock x:Name="DpiFragMini" Text="packets" Style="{StaticResource Dim}" Margin="10,0,4,0" VerticalAlignment="Center"/>
+              <TextBox x:Name="DpiFragPackets" Width="90" Margin="0,0,8,0" TextChanged="OnDpiChanged"/>
+              <TextBlock x:Name="DpiFragLen" Text="length" Style="{StaticResource Dim}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+              <TextBox x:Name="DpiFragLenBox" Width="90" Margin="0,0,8,0" TextChanged="OnDpiChanged"/>
+              <TextBlock x:Name="DpiFragInt" Text="interval ms" Style="{StaticResource Dim}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+              <TextBox x:Name="DpiFragIntBox" Width="90" TextChanged="OnDpiChanged"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <TextBlock x:Name="DpiCipherLabel" Text="Cipher suites" Style="{StaticResource Dim}" VerticalAlignment="Center"/>
+              <TextBox x:Name="DpiCipher" Width="380" Margin="8,0,0,0" TextChanged="OnDpiChanged" FontFamily="{StaticResource MonoFont}"/>
+            </StackPanel>
+            <TextBlock x:Name="DpiMaskLabel" Text="FinalMask (raw FinalMaskObject JSON, advanced)" Style="{StaticResource Dim}" Margin="0,10,0,4"/>
+            <TextBox x:Name="CfgFinalMask" AcceptsReturn="true" Height="84" TextChanged="OnDpiChanged"
+                     VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" TextAlignment="Left"
+                     FontFamily="{StaticResource MonoFont}"/>
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="20" Margin="0,14,0,0">
+          <TextBox x:Name="CfgEditor" AcceptsReturn="true" BorderThickness="0" Background="Transparent"
+                   FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="NoWrap"
+                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                   VerticalContentAlignment="Top" TextAlignment="Left"/>
+        </Border>
+      </Grid>
+
       <!-- ============ Logs ============ -->
       <Grid x:Name="PageLogs" Visibility="Collapsed">
         <Grid.RowDefinitions>
@@ -499,6 +559,8 @@
                        TextWrapping="Wrap" Text="checking…"/>
             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
               <Button x:Name="BtnDownloadCores" Content="Download missing" Style="{StaticResource PrimaryButton}" Click="OnDownloadCoresClick"/>
+              <Button x:Name="BtnUpdateXray" Content="Update Xray" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                      Click="OnUpdateXrayClick" ToolTip="Replace cores\xray.exe with the pinned release (needed for FinalMask). Stop the tunnel first."/>
               <Button x:Name="BtnRefreshCores" Content="Refresh" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="OnRefreshCoresClick"/>
             </StackPanel>
 
