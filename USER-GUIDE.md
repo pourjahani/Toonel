@@ -129,6 +129,12 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
 - There is also **Apply proxy to future terminals** (sets `HTTP_PROXY` etc. via `setx`)
   and **Open runtime folder** (where the generated engine configs and logs live).
 
+### Version / About
+- The running version is shown in the **window title** (`Toonel v1.2.0` — it follows the
+  release tag), next to the brand in the **sidebar**, at the bottom of
+  **Settings → Binaries** (alongside the engine versions), and in the tray menu under
+  **About**.
+
 ### Appearance
 - **Settings → Theme** → **Light** or **Dark**. The whole app switches instantly —
   dashboard, compact bar, dialogs and toasts. Both themes keep proper contrast:
@@ -267,6 +273,11 @@ with **Psiphon**. You can use either one alone, or chain them together in both d
 - اگر بعد از خروج غیرعادی اینترنت خراب شد از آن استفاده کنید. پروفایل‌ها، تنظیمات و
   موتورهای دانلودشده **پاک نمی‌شوند**.
 - گزینه‌های **اعمال پروکسی به ترمینال‌های جدید** و **باز کردن پوشه اجرا** هم همین‌جاست.
+
+### نسخه / درباره
+- نسخهٔ فعلی در **عنوان پنجره** (`تونل v1.2.0` — همان تگ نسخه)، کنار نام برنامه در
+  **نوار کنار**، پایین **تنظیمات → فایل‌های موتور** (کنار نسخهٔ موتورها) و در منوی تری زیر
+  **درباره** دیده می‌شود.
 
 ### ظاهر برنامه
 - **تنظیمات → پوسته** → **روشن** یا **تاریک**. کل برنامه فوراً عوض می‌شود — پیشخوان،

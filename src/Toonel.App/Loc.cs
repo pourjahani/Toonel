@@ -37,6 +37,9 @@ public static class Loc
         ["ENGINES"] = "موتورها",
         ["ROUTE"] = "مسیر",
 
+        // Version / About
+        ["About"] = "درباره",
+
         // Nav
         ["Dashboard"] = "پیشخوان",
         ["Profiles"] = "سرورها",

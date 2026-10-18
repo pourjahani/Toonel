@@ -29,6 +29,8 @@
           </Canvas>
           <TextBlock x:Name="BrandName" Text="Toonel" FontSize="16" FontWeight="SemiBold"
                      Foreground="{DynamicResource Ink}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+          <TextBlock x:Name="BrandVersion" Text="" FontSize="10.5" Foreground="{DynamicResource Muted}"
+                     VerticalAlignment="Bottom" Margin="7,0,0,2"/>
         </StackPanel>
         <TextBlock x:Name="BrandTag" Text="XRAY + PSIPHON CLIENT" Style="{StaticResource MicroLabel}" Margin="4,0,0,26"/>
 
@@ -574,6 +576,12 @@
             <TextBlock x:Name="FlushHint" Style="{StaticResource Dim}" Margin="0,6,0,8"
                        Text="Stops all engines, resets the system proxy and terminal variables, flushes DNS."/>
             <Button x:Name="BtnFlushNetwork" Content="Flush network" Style="{StaticResource GhostButton}" Margin="0,0,0,0" Click="OnFlushNetworkClick" HorizontalAlignment="Left"/>
+
+            <Border Height="1" Background="{DynamicResource Border}" Margin="0,18,0,0"/>
+            <TextBlock x:Name="AboutVersionText" Style="{StaticResource Dim}" FontFamily="{StaticResource MonoFont}"
+                       Margin="0,12,0,0" TextWrapping="Wrap" Text=""/>
+            <TextBlock x:Name="AboutHintText" Style="{StaticResource Dim}" FontSize="11.5" Margin="0,4,0,0"
+                       TextWrapping="Wrap" Text=""/>
           </StackPanel>
         </Border>
         </Grid>

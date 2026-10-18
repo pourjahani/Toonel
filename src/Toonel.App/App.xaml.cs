@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using Microsoft.Win32;
 using Toonel.Core;
@@ -21,6 +22,26 @@ public partial class App : Application
 
     /// <summary>File the app writes fatal errors to (readable even if the UI never appears).</summary>
     public static string CrashLogPath { get; } = PortablePaths.CrashLogFile;
+
+    /// <summary>Product version from the assembly metadata (matches the release tag,
+    /// e.g. "1.2.0" for tag v1.2.0). Shown in the window title, sidebar, Settings and tray About.</summary>
+    public static string AppVersion { get; } = GetAppVersion();
+
+    private static string GetAppVersion()
+    {
+        try
+        {
+            var info = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (!string.IsNullOrEmpty(info))
+            {
+                // Strip the SourceRevisionId ("+g<sha>") when the build stamps one on.
+                var plus = info.IndexOf('+');
+                return plus >= 0 ? info[..plus] : info;
+            }
+        }
+        catch { /* fall through to the manifest version */ }
+        return "1.2.0";
+    }
 
     /// <summary>Swaps the merged palette dictionary (Theme.Light / Theme.Dark) at runtime.</summary>
     public static void ApplyTheme(string theme)

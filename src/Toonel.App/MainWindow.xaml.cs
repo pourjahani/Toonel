@@ -518,7 +518,8 @@ public partial class MainWindow : Window
     {
         FlowDirection = Loc.Flow;
 
-        BrandName.Text = "Toonel";
+        BrandName.Text = Loc.T("Toonel");
+        BrandVersion.Text = "v" + App.AppVersion;
         BrandTag.Text = Loc.T("XRAY + PSIPHON CLIENT");
         NavDash.Content = Loc.T("Dashboard");
         NavProfiles.Content = Loc.T("Profiles");
@@ -652,7 +653,12 @@ public partial class MainWindow : Window
         DpiCipherLabel.Text = Loc.T("Cipher suites");
         DpiMaskLabel.Text = Loc.T("FinalMask (raw FinalMaskObject JSON, advanced)");
 
-        Title = "Toonel";
+        Title = $"{Loc.T("Toonel")} v{App.AppVersion}";
+        AboutVersionText.Text =
+            $"{Loc.T("Toonel")} v{App.AppVersion} · Xray-core {CoreDownloader.XrayVersion} · sing-box {CoreDownloader.SingBoxVersion}";
+        AboutHintText.Text = Loc.IsFa
+            ? "تونل: کلاینت ویندوزی ترکیبی V2Ray + Psiphon. نسخه‌های منتشرشده در صفحه GitHub همین پروژه تگ می‌شوند."
+            : "Toonel — a Windows client combining V2Ray and Psiphon. Releases are tagged on the project's GitHub page.";
         RefreshTiles();
     }
 

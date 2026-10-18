@@ -60,6 +60,16 @@ public sealed class NotifyIconController : IDisposable
         menu.Items.Add(_disconnectItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Loc.T("Dashboard"), null, (_, _) => ShowWindow());
+        menu.Items.Add(Loc.T("About"), null, (_, _) => _window.Dispatcher.Invoke(() =>
+        {
+            MessageBox.Show(
+                $"Toonel v{App.AppVersion}\n" +
+                $"Xray-core {CoreDownloader.XrayVersion} · sing-box {CoreDownloader.SingBoxVersion}\n\n" +
+                (Loc.IsFa
+                    ? "کلاینت ویندوزی ترکیبی V2Ray + Psiphon. نسخه‌های منتشرشده در صفحه GitHub همین پروژه تگ می‌شوند."
+                    : "A Windows client combining V2Ray and Psiphon. Releases are tagged on the project's GitHub page."),
+                Loc.T("About") + " — Toonel", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }));
         menu.Items.Add("Exit", null, (_, _) => _window.Dispatcher.Invoke(() =>
         {
             _window.ForceClose = true;
